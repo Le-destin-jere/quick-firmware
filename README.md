@@ -1,4 +1,4 @@
-# Quick Firmware+
+# Quick Firmware +
 
 
 ⚡协助编译生成的固件和快速固件下载的插件⚡
@@ -27,14 +27,12 @@
 
 1. 打开 VS Code；
    
-2. 按 `Ctrl+Shift+P` (Windows) 打开 命令视图；
+2. 按 `Ctrl+Shift+X` (Windows) 打开`扩展`视图；
    
-3. 点击 开发人员：从位置安装插件；
-   
-4. 选择插件解压到的指定目录，选择其为安装路径；
+3. 点击`扩展`右侧`...`菜单 > 从VSIX安装... ：选择安装此插件；
    
 
-![安装视图](images/install1.png)
+![安装视图](images/install.png)
 
 
 ### 基本使用
@@ -67,7 +65,7 @@
 
     注：若不能自动AT触发模组进下载模式的，请外部手动进入下载模式；
     
-4. 侧边栏视图：VSCODE侧边栏中点击`Quick Firmware+`图标，即可查看固件列表信息、设备列表信息、和可配置信息；
+4. 侧边栏视图：VSCODE侧边栏中点击`Quick Firmware +`图标，即可查看固件列表信息、设备列表信息、和可配置信息；
 
 #### 二、协助编译
 
@@ -76,6 +74,4 @@
 使用过程遇到问题请联系：
 
 email: <a href="destin.zhang@quectel.com">destin.zhang@quectel.com </a>
-
-技术支持：<a>通义千问</a> <a>通义灵码</a>
 
