@@ -1,0 +1,145 @@
+{
+  "name": "quick-firmware-plus",
+  "displayName": "Quick Firmware +",
+  "description": "协助编译生成和固件下载",
+  "version": "0.2.4",
+  "publisher": "destin.zhang",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#ffffff",
+    "theme": "light"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Le-destin-jere/quick-firmware.git"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "iconv-lite": "^0.6.3",
+    "ini": "^6.0.0",
+    "serialport": "^13.0.0",
+    "systeminformation": "^5.28.5"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "firmware-explorer",
+          "title": "Quick Firmware +",
+          "icon": "images/icon-quick.svg"
+        }
+      ]
+    },
+    "views": {
+      "firmware-explorer": [
+        {
+          "id": "firmware-explorer",
+          "name": "固件列表",
+          "icon": "$(list-tree)",
+          "contextualTitle": "Quick Firmware +"
+        },
+        {
+          "id": "firmware-devices",
+          "name": "设备列表",
+          "icon": "$(list-tree)",
+          "contextualTitle": "Quick Firmware +"
+        },
+        {
+          "id": "firmware-settings",
+          "name": "可配置项",
+          "icon": "$(gear)",
+          "contextualTitle": "Quick Firmware +"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "firmwareDownloader.download",
+        "title": "固件下载",
+        "icon": "$(arrow-circle-down)"
+      },
+      {
+        "command": "firmwareDownloader.refresh",
+        "title": "列表刷新",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "firmwareDownloader.find",
+        "title": "外部查找",
+        "icon": "$(search)"
+      },
+      {
+        "command": "firmwareDownloader.clear",
+        "title": "清除查找",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "firmwareDownloader.devices_refresh",
+        "title": "设备刷新",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "firmwareDownloader.devices_filter",
+        "title": "设备过滤",
+        "icon": "$(filter)",
+        "enablement": "!firmware.devices.filterApplied"
+      },
+      {
+        "command": "firmwareDownloader.devices_filter_cancel",
+        "title": "取消设备过滤",
+        "icon": "$(filter-filled)",
+        "enablement": "firmware.devices.filterApplied"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "firmwareDownloader.refresh",
+          "when": "view == firmware-explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "firmwareDownloader.find",
+          "when": "view == firmware-explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "firmwareDownloader.clear",
+          "when": "view == firmware-explorer",
+          "group": "navigation"
+        },
+        {
+          "command": "firmwareDownloader.devices_refresh",
+          "when": "view == firmware-devices",
+          "group": "navigation"
+        },
+        {
+          "command": "firmwareDownloader.devices_filter",
+          "when": "view == firmware-devices && !firmware.devices.filterApplied",
+          "group": "navigation"
+        },
+        {
+          "command": "firmwareDownloader.devices_filter_cancel",
+          "when": "view == firmware-devices && firmware.devices.filterApplied",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "firmwareDownloader.download",
+          "when": "view == firmware-explorer && viewItem == firmware-file"
+        }
+      ]
+    }
+  }
+}
