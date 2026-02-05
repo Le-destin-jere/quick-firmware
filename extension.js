@@ -41,6 +41,440 @@ function not_support_disp()
     vscode.window.showErrorMessage(`${alert}`);
 } 
 
+// 导入新的串口实现
+const { QuickSerial } = require('./src/serial/quick_serial');
+
+// 串口调试功能相关代码
+
+// 添加串口实例
+const serialPanels = [];
+const quickSerialInstances = [];
+
+// 创建串口调试WebView面板
+function createSerialDebugPanel() {
+    // 不再检查是否已存在面板，总是创建新面板
+
+    // 创建新的WebView面板
+    const panel = vscode.window.createWebviewPanel(
+        'serialDebug', // 标识符
+        '[Quick Serial]', // 面板标题
+        vscode.ViewColumn.One, // 显示在第一列
+        {
+            enableScripts: true, // 启用脚本
+            retainContextWhenHidden: true // 隐藏时保持状态
+        }
+    );
+
+    // 为每个面板创建独立的串口实例
+    const quickSerial = new QuickSerial();
+    const panelIndex = serialPanels.length;
+    
+    // 存储面板和串口实例
+    serialPanels.push(panel);
+    quickSerialInstances.push(quickSerial);
+
+    // 设置WebView内容
+    panel.webview.html = getSerialWebviewContent(panel.webview);
+
+    // 当面板被处置时，清理引用
+    panel.onDidDispose(() => {
+        // 找到并移除对应的面板和串口实例
+        const index = serialPanels.indexOf(panel);
+        if (index !== -1) {
+            serialPanels.splice(index, 1);
+            quickSerialInstances.splice(index, 1);
+            
+            // 关闭串口连接
+            quickSerial.close().catch(() => {});
+        }
+    });
+
+    // 处理来自WebView的消息，传递面板索引和串口实例
+    panel.webview.onDidReceiveMessage((message) => {
+        handleWebviewMessage(message, panelIndex, quickSerial);
+    });
+    
+    // 面板创建后，加载AT命令配置列表和AT命令
+    loadAtConfigList();
+    loadAtCommandsFromIni();
+}
+
+// 获取WebView HTML内容
+function getSerialWebviewContent(webview) {
+    const scriptUri = webview.asWebviewUri(vscode.Uri.file(path.join(__dirname, 'src', 'webview', 'serial.js')));
+    const cssUri = webview.asWebviewUri(vscode.Uri.file(path.join(__dirname, 'src', 'webview', 'serial.css')));
+    const htmlPath = path.join(__dirname, 'src', 'webview', 'serial.html');
+    
+    // 读取HTML模板并替换资源路径
+    let htmlContent = fs.readFileSync(htmlPath, 'utf-8');
+    // 替换CSS和JS引用为Webview URI
+    htmlContent = htmlContent.replace('./serial.css', cssUri.toString());
+    htmlContent = htmlContent.replace('./serial.js', scriptUri.toString());
+    
+    return htmlContent;
+}
+
+// 修改：处理来自WebView的消息，添加panelIndex和quickSerial参数
+async function handleWebviewMessage(message, panelIndex, quickSerial) {
+    switch (message.command) {
+        case 'serialConnected':
+            // 使用传入的串口实例建立连接
+            try {
+                const portPath = message.portPath;
+                const baudRate = message.baudRate;
+                const success = await quickSerial.open(portPath, baudRate);
+                
+                if (success) {
+                    // 设置接收数据回调
+                    quickSerial.setOnReceive((data) => {
+                        if (serialPanels[panelIndex] && serialPanels[panelIndex].webview) {
+                            serialPanels[panelIndex].webview.postMessage({
+                                command: 'addReceivedData',
+                                data: data
+                            });
+                        }
+                    });
+                    
+                    // 通知WebView连接成功
+                    if (serialPanels[panelIndex] && serialPanels[panelIndex].webview) {
+                        serialPanels[panelIndex].webview.postMessage({
+                            command: 'serialConnected',
+                            portPath: portPath,
+                            baudRate: baudRate
+                        });
+                    }
+                } else {
+                    vscode.window.showErrorMessage('串口连接失败');
+                }
+            } catch (err) {
+                vscode.window.showErrorMessage(`串口连接错误: ${err.message}`);
+            }
+            break;
+        case 'serialDisconnected':
+            try {
+                await quickSerial.close();
+                //vscode.window.showInformationMessage('串口已断开');
+            } catch (err) {
+                vscode.window.showErrorMessage(`串口断开错误: ${err.message}`);
+            }
+            break;
+        case 'requestPorts':
+            try {
+                const ports = await quickSerial.listPorts();
+                if (serialPanels[panelIndex] && serialPanels[panelIndex].webview) {
+                    serialPanels[panelIndex].webview.postMessage({
+                        command: 'updatePorts',
+                        ports: ports
+                    });
+                }
+            } catch (err) {
+                vscode.window.showErrorMessage(`获取串口列表失败: ${err.message}`);
+            }
+            break;
+        case 'sendData':
+            try {
+                const data = message.data;
+                const isHex = message.isHex || false;
+                await quickSerial.write(data, isHex);
+            } catch (err) {
+                vscode.window.showErrorMessage(`发送数据失败: ${err.message}`);
+            }
+            break;
+        case 'setDTR':
+            try {
+                if (!quickSerial.isOpen) {
+                    break;
+                }
+                const state = message.state;
+                await quickSerial.setDTR(state);
+            } catch (err) {
+                //vscode.window.showErrorMessage(`设置DTR失败: ${err.message}`);
+            }
+            break;
+        case 'setRTS':
+            try {
+                if (!quickSerial.isOpen) {
+                    break;
+                }
+                const state = message.state;
+                await quickSerial.setRTS(state);
+            } catch (err) {
+                //vscode.window.showErrorMessage(`设置RTS失败: ${err.message}`);
+            }
+            break;
+        case 'loadAtCommands':
+            loadAtCommandsFromIni(message.configName || null);
+            break;
+        case 'loadAtConfigList':
+            loadAtConfigList();
+            break;
+        case 'updateAtCommand':
+            // 修改：接收并传递commandIndex参数
+            updateAtCommand(
+                message.oldCommand, 
+                message.newCommand, 
+                message.configName, 
+                message.commandIndex
+            );
+            break;
+        case 'saveLog':
+            await saveSerialLog(message.content);
+            break;
+    }
+}
+
+// 加载AT命令配置列表
+function loadAtConfigList() {
+    const workspace_folders = vscode.workspace.workspaceFolders;
+    if (!workspace_folders || workspace_folders.length === 0) {
+        sendAtConfigListToWebview([]);
+        return;
+    }
+
+    const configs = [];
+    
+    // 从主配置文件读取cmd_path
+    const iniPath = path.join(workspace_folders[0].uri.fsPath, ini_file_name);
+    if (fs.existsSync(iniPath)) {
+        const iniFile = ini.parse(fs.readFileSync(iniPath, 'utf-8'));
+        
+        if (iniFile['at_commands']) {
+            // 检查cmd_path1到cmd_path4
+            for (let i = 1; i <= 4; i++) {
+                const cmdPath = iniFile['at_commands'][`cmd_path${i}`];
+                if (cmdPath && cmdPath.trim() !== '') {
+                    const filePath = path.resolve(workspace_folders[0].uri.fsPath, cmdPath);
+                    if (fs.existsSync(filePath)) {
+                        const fileName = path.basename(filePath, '.ini');
+                        configs.push({
+                            name: `file:${filePath}`,
+                            displayName: `${fileName}`
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    sendAtConfigListToWebview(configs);
+}
+
+// 提取公共的INI文件解析函数
+function parseAtCommandsFromIni(iniFile) {
+    let atCommands = [];
+    
+    // 检查是否有数字键格式的命令（如[1], [2]等）
+    const numericSections = Object.keys(iniFile).filter(key => 
+        !isNaN(key) && typeof iniFile[key] === 'object' && key !== 'SET'
+    );
+    
+    if (numericSections.length > 0) {
+        // 处理数字键的格式
+        numericSections.sort((a, b) => parseInt(a) - parseInt(b)).forEach(sectionKey => {
+            const cmdValue = iniFile[sectionKey]['CMD'];
+            // 修改：即使cmdValue为空字符串也要添加到atCommands中
+            if (typeof cmdValue === 'string') {
+                atCommands.push(cmdValue);
+            }
+            // 如果cmdValue不存在或不是字符串，也添加空字符串以保持序号对应
+            else if (cmdValue === undefined || cmdValue === null) {
+                atCommands.push('');
+            }
+        });
+    } 
+    
+    return atCommands;
+}
+
+// 从INI文件加载AT命令
+function loadAtCommandsFromIni(configName = null) {
+    const workspace_folders = vscode.workspace.workspaceFolders;
+    if (!workspace_folders || workspace_folders.length === 0) {
+        sendAtCommandsToWebview([]);
+        return;
+    }
+
+    let atCommands = [];
+
+    if (configName && configName.startsWith('file:')) {
+        // 处理文件配置
+        const filePath = configName.substring(5); // 移除 'file:' 前缀
+        if (fs.existsSync(filePath)) {
+            try {
+                const iniFile = ini.parse(fs.readFileSync(filePath, 'utf-8'));
+                atCommands = parseAtCommandsFromIni(iniFile);
+            } catch (error) {
+                console.error('Error loading AT commands from file:', error);
+            }
+        }
+    } else {
+        // 修改：如果没有指定配置名称，也尝试从主配置文件的cmd_path加载
+        const iniPath = path.join(workspace_folders[0].uri.fsPath, ini_file_name);
+        if (!fs.existsSync(iniPath)) {
+            sendAtCommandsToWebview([]);
+            return;
+        }
+        const iniFile = ini.parse(fs.readFileSync(iniPath, 'utf-8'));
+        // 尝试从at_commands段的cmd_path配置加载
+        if (iniFile['at_commands']) {
+            for (let i = 1; i <= 4; i++) {
+                const cmdPath = iniFile['at_commands'][`cmd_path${i}`];
+                if (cmdPath && cmdPath.trim() !== '') {
+                    const resolvedPath = path.resolve(workspace_folders[0].uri.fsPath, cmdPath);
+                    if (fs.existsSync(resolvedPath)) {
+                        try {
+                            const externalIniFile = ini.parse(fs.readFileSync(resolvedPath, 'utf-8'));
+                            // 使用公共函数解析AT命令
+                            const externalAtCommands = parseAtCommandsFromIni(externalIniFile);
+                            atCommands = atCommands.concat(externalAtCommands);
+                        } catch (error) {
+                            console.error('Error loading AT commands from external file:', error);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    sendAtCommandsToWebview(atCommands);
+}
+
+// 更新AT命令
+function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex = -1) {
+    const workspace_folders = vscode.workspace.workspaceFolders;
+    if (!workspace_folders || workspace_folders.length === 0) {
+        return;
+    }
+
+    let iniPath;
+    let isExternalFile = false;
+    
+    // 检查是否是外部文件配置
+    if (configName && configName.startsWith('file:')) {
+        iniPath = configName.substring(5); // 移除 'file:' 前缀
+        isExternalFile = true;
+    } else {
+        iniPath = path.join(workspace_folders[0].uri.fsPath, ini_file_name);
+    }
+
+    if (!fs.existsSync(iniPath)) {
+        return;
+    }
+
+    try {
+        const iniFile = ini.parse(fs.readFileSync(iniPath, 'utf-8'));
+        let updated = false;
+        
+        // 修改：使用序号来精确匹配要更新的命令
+        const numericSections = Object.keys(iniFile).filter(key => 
+            !isNaN(key) && typeof iniFile[key] === 'object' && key !== 'SET'
+        );
+        
+        if (numericSections.length > 0) {
+            // 根据序号排序
+            numericSections.sort((a, b) => parseInt(a) - parseInt(b));
+            
+            // 如果提供了有效的commandIndex，直接使用索引更新
+            if (commandIndex >= 0 && commandIndex < numericSections.length) {
+                const targetSection = numericSections[commandIndex];
+                iniFile[targetSection]['CMD'] = newCommand;
+                updated = true;
+            }
+            // 如果没有提供commandIndex（兼容旧版本），则回退到按值匹配的方式
+            else if (commandIndex === -1) {
+                // 找到oldCommand在命令列表中的索引位置
+                let foundIndex = -1;
+                let currentIndex = 0;
+                for (const sectionKey of numericSections) {
+                    const cmdValue = iniFile[sectionKey]['CMD'];
+                    let currentCmd = '';
+                    if (typeof cmdValue === 'string') {
+                        currentCmd = cmdValue;
+                    }
+                    else if (cmdValue === undefined || cmdValue === null) {
+                        currentCmd = '';
+                    }
+                    
+                    if (currentCmd === oldCommand) {
+                        foundIndex = currentIndex;
+                        break;
+                    }
+                    currentIndex++;
+                }
+                
+                if (foundIndex !== -1 && foundIndex < numericSections.length) {
+                    const targetSection = numericSections[foundIndex];
+                    iniFile[targetSection]['CMD'] = newCommand;
+                    updated = true;
+                }
+            }
+        }
+        
+        if (updated) {
+            fs.writeFileSync(iniPath, ini.stringify(iniFile));
+            console.log(`Updated AT command from "${oldCommand}" to "${newCommand}" in file: ${iniPath}`);
+            
+            // 修改：如果在WebView中打开了串口面板，重新加载AT命令（向所有面板发送）
+            serialPanels.forEach(panel => {
+                if (panel && panel.webview) {
+                    loadAtCommandsFromIni(configName || null);
+                }
+            });
+        } else {
+            console.warn(`Old command not found or invalid index: "${oldCommand}", index: ${commandIndex}`);
+        }
+    } catch (error) {
+        console.error('Error updating AT command:', error);
+    }
+}
+
+// 发送AT命令配置列表到WebView
+function sendAtConfigListToWebview(configs) {
+    // 修改：向所有串口面板实例发送消息
+    serialPanels.forEach(panel => {
+        if (panel && panel.webview) {
+            panel.webview.postMessage({
+                command: 'updateAtConfigList',
+                configs: configs
+            });
+        }
+    });
+}
+
+// 发送AT命令到WebView
+function sendAtCommandsToWebview(commands) {
+    // 修改：向所有串口面板实例发送消息
+    serialPanels.forEach(panel => {
+        if (panel && panel.webview) {
+            panel.webview.postMessage({
+                command: 'displayAtCommands',
+                commands: commands
+            });
+        }
+    });
+}
+
+// 保存串口日志
+async function saveSerialLog(content) {
+    try {
+        const options = {
+            filters: {
+                'Text Files': ['txt'],
+                'All Files': ['*']
+            },
+            defaultUri: vscode.Uri.file(path.join(vscode.workspace.rootPath || __dirname, 'serial_log.txt'))
+        };
+        
+        const uri = await vscode.window.showSaveDialog(options);
+        if (uri) {
+            fs.writeFileSync(uri.fsPath, content, 'utf-8');
+            vscode.window.showInformationMessage('日志已保存');
+        }
+    } catch (error) {
+        vscode.window.showErrorMessage(`保存日志失败: ${error.message}`);
+    }
+}
+
 // 侧边栏树视图提供者
 class FirmwareTreeDataProvider {
     constructor() {
@@ -703,6 +1137,10 @@ function create_ini_file(ini_path)
     fs.appendFileSync(ini_path, '[build]\r\n');
     fs.appendFileSync(ini_path, 'cmd=\r\n');
     fs.appendFileSync(ini_path, 'create=false\r\n');
+    // 添加AT命令配置段
+    fs.appendFileSync(ini_path, '[at_commands]\r\n');
+    fs.appendFileSync(ini_path, 'cmd_path1=\n');
+
 }
 
 function activate(context) 
@@ -765,10 +1203,9 @@ function activate(context)
     // 创建设备列表视图
     const deviceTreeDataProvider = new DeviceTreeDataProvider();
     vscode.window.registerTreeDataProvider('firmware-devices', deviceTreeDataProvider);
-    
     // 启动自动刷新（每20秒刷新一次）
     deviceTreeDataProvider.startAutoRefresh();
-    
+
     // 注册刷新固件列表命令
     const refreshFirmwareListCommand = vscode.commands.registerCommand('firmwareDownloader.refresh', () => {
         firmwareTreeDataProvider.refresh();
@@ -877,7 +1314,12 @@ function activate(context)
             }
         }
     });
- 
+    
+    // 注册串口调试命令
+    const openSerialDebugCommand = vscode.commands.registerCommand('firmwareDownloader.serial', () => {
+        createSerialDebugPanel();
+    });
+
     // 注册构建命令
     let build_disposable = vscode.commands.registerCommand('firmwareDownloader.build', async function () {
 
@@ -1352,6 +1794,7 @@ function activate(context)
     context.subscriptions.push(filterCancelDevicesCommand);
     context.subscriptions.push(buildCommandArgsCommand);
     context.subscriptions.push(copyPathCommand);
+    context.subscriptions.push(openSerialDebugCommand);
 
     context.subscriptions.push(build_disposable);
     context.subscriptions.push(download_disposable);
@@ -1361,9 +1804,17 @@ function activate(context)
 }
 
 function deactivate() {
-
+    // 关闭所有串口调试面板
+    for (const panel of serialPanels) {
+        panel.dispose();
+    }
+    // 关闭所有串口连接
+    for (const quickSerial of quickSerialInstances) {
+        quickSerial.close().catch(() => {});
+    }
 }
 
+// 添加模块导出，使 VS Code 能够激活此扩展
 module.exports = {
     activate,
     deactivate

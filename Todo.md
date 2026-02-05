@@ -3,7 +3,6 @@
 ## worklist
 
 
-
 (RTOS):
 
 -  `feature` 
@@ -12,12 +11,12 @@
 
    packet list 
 
-   serial tools 
+   serial tools         :working
 
 -  `bugfix`
   
 - 🧩`ASR`     
-    1903S ：bash build 
+    1903S ：bash build  :pending
 
 - 🧩`UNISOC`  
 

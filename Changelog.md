@@ -1,6 +1,6 @@
 ## 0.2.5 / 2026-01-16
+  * quick serial debug support.
   * bash build fix (1903S).
-  * 
   * others some changes.
   
 ## 0.2.4 / 2025-12-31

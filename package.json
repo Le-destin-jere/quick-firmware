@@ -99,6 +99,11 @@
         "title": "取消设备过滤",
         "icon": "$(filter-filled)",
         "enablement": "firmware.devices.filterApplied"
+      },
+      {
+        "command": "firmwareDownloader.serial",
+        "title": "串口调试工具",
+        "icon": "$(plug)"
       }
     ],
     "menus": {
@@ -131,6 +136,11 @@
         {
           "command": "firmwareDownloader.devices_filter_cancel",
           "when": "view == firmware-devices && firmware.devices.filterApplied",
+          "group": "navigation"
+        },
+        {
+          "command": "firmwareDownloader.serial",
+          "when": "view == firmware-devices",
           "group": "navigation"
         }
       ],
