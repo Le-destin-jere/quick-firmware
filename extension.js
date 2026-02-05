@@ -1,4 +1,3 @@
-
 /**
 * @description:Quick Firmware + 
     a tool build&sync firmware friendly.
@@ -23,10 +22,13 @@ const tool_set = {
     'ecf':'ecflashtool\\ECFlashTool.exe'
 };
 
-const ini_file_name = 'firmware+.ini';
-const version = require('./package.json').version;
 const output_chan = vscode.window.createOutputChannel('Quick Firmware +');
 const alert = "无法识别到有效下载固件，请指定文件/目录";
+
+// 获取配置的工具函数
+function get_configuration() {
+    return vscode.workspace.getConfiguration('quickFirmwarePlus');
+}
 
 function is_windows() {
     return process.platform === 'win32';
@@ -72,10 +74,8 @@ function createSerialDebugPanel() {
     // 存储面板和串口实例
     serialPanels.push(panel);
     quickSerialInstances.push(quickSerial);
-
     // 设置WebView内容
     panel.webview.html = getSerialWebviewContent(panel.webview);
-
     // 当面板被处置时，清理引用
     panel.onDidDispose(() => {
         // 找到并移除对应的面板和串口实例
@@ -88,7 +88,6 @@ function createSerialDebugPanel() {
             quickSerial.close().catch(() => {});
         }
     });
-
     // 处理来自WebView的消息，传递面板索引和串口实例
     panel.webview.onDidReceiveMessage((message) => {
         handleWebviewMessage(message, panelIndex, quickSerial);
@@ -225,36 +224,24 @@ async function handleWebviewMessage(message, panelIndex, quickSerial) {
 
 // 加载AT命令配置列表
 function loadAtConfigList() {
-    const workspace_folders = vscode.workspace.workspaceFolders;
-    if (!workspace_folders || workspace_folders.length === 0) {
-        sendAtConfigListToWebview([]);
-        return;
-    }
 
-    const configs = [];
+    // 从 VS Code 配置读取cmd_path
+    const config = get_configuration();
+    const atCommandPaths = config.get('atCommandPaths') || [];
     
-    // 从主配置文件读取cmd_path
-    const iniPath = path.join(workspace_folders[0].uri.fsPath, ini_file_name);
-    if (fs.existsSync(iniPath)) {
-        const iniFile = ini.parse(fs.readFileSync(iniPath, 'utf-8'));
-        
-        if (iniFile['at_commands']) {
-            // 检查cmd_path1到cmd_path4
-            for (let i = 1; i <= 4; i++) {
-                const cmdPath = iniFile['at_commands'][`cmd_path${i}`];
-                if (cmdPath && cmdPath.trim() !== '') {
-                    const filePath = path.resolve(workspace_folders[0].uri.fsPath, cmdPath);
-                    if (fs.existsSync(filePath)) {
-                        const fileName = path.basename(filePath, '.ini');
-                        configs.push({
-                            name: `file:${filePath}`,
-                            displayName: `${fileName}`
-                        });
-                    }
-                }
+    // 遍历路径数组
+    const configs = [];
+    atCommandPaths.forEach((cmdPath) => {
+        if (cmdPath && cmdPath.trim() !== '') {
+            if (fs.existsSync(cmdPath)) {
+                const fileName = path.basename(cmdPath, '.ini');
+                configs.push({
+                    name: `file:${cmdPath}`,
+                    displayName: `${fileName}`
+                });
             }
         }
-    }
+    });
 
     sendAtConfigListToWebview(configs);
 }
@@ -288,49 +275,22 @@ function parseAtCommandsFromIni(iniFile) {
 
 // 从INI文件加载AT命令
 function loadAtCommandsFromIni(configName = null) {
-    const workspace_folders = vscode.workspace.workspaceFolders;
-    if (!workspace_folders || workspace_folders.length === 0) {
-        sendAtCommandsToWebview([]);
-        return;
-    }
 
     let atCommands = [];
-
-    if (configName && configName.startsWith('file:')) {
-        // 处理文件配置
-        const filePath = configName.substring(5); // 移除 'file:' 前缀
-        if (fs.existsSync(filePath)) {
-            try {
-                const iniFile = ini.parse(fs.readFileSync(filePath, 'utf-8'));
-                atCommands = parseAtCommandsFromIni(iniFile);
-            } catch (error) {
-                console.error('Error loading AT commands from file:', error);
-            }
-        }
-    } else {
-        // 修改：如果没有指定配置名称，也尝试从主配置文件的cmd_path加载
-        const iniPath = path.join(workspace_folders[0].uri.fsPath, ini_file_name);
-        if (!fs.existsSync(iniPath)) {
-            sendAtCommandsToWebview([]);
-            return;
-        }
-        const iniFile = ini.parse(fs.readFileSync(iniPath, 'utf-8'));
-        // 尝试从at_commands段的cmd_path配置加载
-        if (iniFile['at_commands']) {
-            for (let i = 1; i <= 4; i++) {
-                const cmdPath = iniFile['at_commands'][`cmd_path${i}`];
-                if (cmdPath && cmdPath.trim() !== '') {
-                    const resolvedPath = path.resolve(workspace_folders[0].uri.fsPath, cmdPath);
-                    if (fs.existsSync(resolvedPath)) {
-                        try {
-                            const externalIniFile = ini.parse(fs.readFileSync(resolvedPath, 'utf-8'));
-                            // 使用公共函数解析AT命令
-                            const externalAtCommands = parseAtCommandsFromIni(externalIniFile);
-                            atCommands = atCommands.concat(externalAtCommands);
-                        } catch (error) {
-                            console.error('Error loading AT commands from external file:', error);
-                        }
-                    }
+    // 修改：如果没有指定配置名称，也尝试从主配置文件的cmd_path加载
+    const config = get_configuration();
+    const atCommandPaths = config.get('atCommandPaths') || [];
+    
+    // 从VS Code配置加载
+    for (const cmdPath of atCommandPaths) {
+        if (cmdPath && cmdPath.trim() !== '') {
+            if (fs.existsSync(cmdPath)) {
+                try {
+                    const externalIniFile = ini.parse(fs.readFileSync(cmdPath, 'utf-8'));
+                    const externalAtCommands = parseAtCommandsFromIni(externalIniFile);
+                    atCommands = atCommands.concat(externalAtCommands);
+                } catch (error) {
+                    console.error('Error loading AT commands from external file:', error);
                 }
             }
         }
@@ -341,21 +301,12 @@ function loadAtCommandsFromIni(configName = null) {
 
 // 更新AT命令
 function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex = -1) {
-    const workspace_folders = vscode.workspace.workspaceFolders;
-    if (!workspace_folders || workspace_folders.length === 0) {
-        return;
-    }
 
     let iniPath;
-    let isExternalFile = false;
-    
     // 检查是否是外部文件配置
     if (configName && configName.startsWith('file:')) {
         iniPath = configName.substring(5); // 移除 'file:' 前缀
-        isExternalFile = true;
-    } else {
-        iniPath = path.join(workspace_folders[0].uri.fsPath, ini_file_name);
-    }
+    } 
 
     if (!fs.existsSync(iniPath)) {
         return;
@@ -364,7 +315,6 @@ function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex
     try {
         const iniFile = ini.parse(fs.readFileSync(iniPath, 'utf-8'));
         let updated = false;
-        
         // 修改：使用序号来精确匹配要更新的命令
         const numericSections = Object.keys(iniFile).filter(key => 
             !isNaN(key) && typeof iniFile[key] === 'object' && key !== 'SET'
@@ -373,7 +323,6 @@ function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex
         if (numericSections.length > 0) {
             // 根据序号排序
             numericSections.sort((a, b) => parseInt(a) - parseInt(b));
-            
             // 如果提供了有效的commandIndex，直接使用索引更新
             if (commandIndex >= 0 && commandIndex < numericSections.length) {
                 const targetSection = numericSections[commandIndex];
@@ -501,28 +450,25 @@ class FirmwareTreeDataProvider {
 
     getFirmwareRootItems() {
         const items = [];
+        const config = get_configuration();
+        const firmwarePath = config.get('firmwarePath');
+        if (firmwarePath && firmwarePath.length > 0) {
+            if (fs.existsSync(firmwarePath)) {
+                const dir_path = firmwarePath;
+                const time = fs.statSync(dir_path).mtime;
+                if (fs.statSync(dir_path).isDirectory()) {
+                    const dir = path.basename(dir_path);
+                    const firmware_files = this.getFirmwareFiles(dir_path);
+                    const item = new FirmwareItem(dir, dir_path, time, vscode.TreeItemCollapsibleState.Collapsed, firmware_files);
+                    items.push(item);
+                }
+                return items;
+            }
+        }
         const workspace_folders = vscode.workspace.workspaceFolders;
-
         if (workspace_folders && workspace_folders.length > 0) {
             for (const folder of workspace_folders) {
-                let ini_path = path.join(workspace_folders[0].uri.fsPath, ini_file_name);
-                if (fs.existsSync(ini_path)) { 
-                    const ini_file = ini.parse(fs.readFileSync(ini_path, 'utf-8'));
-                    const uri = ini_file['download']['uri'];
-                    if (uri != null && uri.length > 0) { 
-                        if (fs.existsSync(uri)) {
-                            const dir_path = uri;
-                            const time = fs.statSync(dir_path).mtime;
-                            if (fs.statSync(dir_path).isDirectory()) {
-                                const dir = path.basename(dir_path);
-                                const firmware_files = this.getFirmwareFiles(dir_path);
-                                const item = new FirmwareItem(dir, dir_path, time, vscode.TreeItemCollapsibleState.Collapsed, firmware_files);
-                                items.push(item);
-                            }
-                            return items;
-                        }
-                    }
-                }                
+                // 如果没有配置固件路径，检查workspace的quectel_build/release目录
                 const release_path = path.join(folder.uri.fsPath, 'quectel_build', 'release');
                 if (fs.existsSync(release_path)) {
                     const release_dirs = fs.readdirSync(release_path);
@@ -536,6 +482,7 @@ class FirmwareTreeDataProvider {
                         }
                     }
                 }  
+                
             }
         }
 
@@ -722,16 +669,14 @@ class DeviceTreeDataProvider {
                                 resolve(items);
                             }
                         } else {
-                            // 如果wmic失败，回退到systeminformation
-                            this.getDeviceRootItemsFallback().then(resolve).catch(() => {
-                                resolve([new InfoItem('未找到串口设备', '请检查设备连接', vscode.TreeItemCollapsibleState.None)]);
-                            });
+                            // 如果wmic失败
+                            resolve([new InfoItem('未找到串口设备', '请检查设备连接', vscode.TreeItemCollapsibleState.None)]);
                         }
                     });
                 });
             } else {
-                // 非Windows系统，使用systeminformation
-                return this.getDeviceRootItemsFallback();
+                // 非Windows系统
+                return [new InfoItem('获取设备列表失败', error.message, vscode.TreeItemCollapsibleState.None)];
             }
         } catch (error) {
             console.error('Error getting device list:', error);
@@ -739,37 +684,6 @@ class DeviceTreeDataProvider {
         }
     }
     
-    // 回退方法，使用systeminformation
-    async getDeviceRootItemsFallback() {
-        try {
-            const usbs = await si.usb();
-            const items = [];
-            if (usbs && usbs.length > 0) {
-                for (const usb of usbs) {
-                    let description = usb.type;
-                    let label = usb.name;
-                    if (usb.type === 'Keyboard' 
-                    || usb.type === 'Mouse'
-                    || usb.type === 'Controller') {
-                        continue;
-                    }
-                    items.push(new DeviceItem(
-                        label || 'Unknown',
-                        description,
-                        vscode.TreeItemCollapsibleState.None
-                    ));
-                }
-            } else {
-                items.push(new InfoItem('未找到串口设备', '请检查设备连接', vscode.TreeItemCollapsibleState.None));
-            }
-            
-            return items;
-
-        } catch (error) {
-            console.error('Error getting device list with fallback method:', error);
-            return [new InfoItem('获取设备列表失败', error.message, vscode.TreeItemCollapsibleState.None)];
-        }
-    }
 }
 
 class DeviceItem extends vscode.TreeItem {
@@ -805,33 +719,26 @@ class SettingsTreeDataProvider {
     }
     getSettingsItems() {
         const items = [];
+        const config = get_configuration();
         const workspace_folders = vscode.workspace.workspaceFolders;
-        let build_cmd = null;
-        let frim_path = null;
-        if (workspace_folders && workspace_folders.length > 0) { 
-            let ini_path = path.join(workspace_folders[0].uri.fsPath, ini_file_name);
-            if (fs.existsSync(ini_path)) { 
-                const ini_file = ini.parse(fs.readFileSync(ini_path, 'utf-8'));
-                const uri = ini_file['download']['uri'];
-                if (uri != null && uri.length > 0) { 
-                    frim_path = uri;
-                } else {
-                    const folder = workspace_folders[0]; 
-                    const release_path = path.join(folder.uri.fsPath, 'quectel_build', 'release');
-                    frim_path  =`will try: ${release_path}`;
-                }
-                const cmd = ini_file['build']['cmd'];
-                if (cmd != null && cmd.length > 0) { 
-                    build_cmd = cmd;   
-                } else { 
-                    build_cmd = 'will try: build*OPTfile.bat';   
-                }
+        // 优先使用VS Code设置
+        let build_cmd = config.get('buildCommand') || '';
+        let frim_path = config.get('firmwarePath') || '';
+        // 设置默认值
+        if (!build_cmd) {
+            build_cmd = 'will try: build*OPTfile.bat';   
+        }
+        if (!frim_path) {
+            if (workspace_folders && workspace_folders.length > 0) {
+                const release_path = path.join(workspace_folders[0].uri.fsPath, 'quectel_build', 'release');
+                frim_path = `will try: ${release_path}`;
+            } else {
+                frim_path = '未设置';
             }
         }
 
-        // 添加设置项
         items.push(new SettingsItem('构建指令', `${build_cmd}`, vscode.TreeItemCollapsibleState.None, 'build-command'));
-        items.push(new SettingsItem('固件目录', `${frim_path}`, vscode.TreeItemCollapsibleState.None, 'firmware-dir'));
+        items.push(new SettingsItem('插件设置', '', vscode.TreeItemCollapsibleState.None, 'firmware-settings'));
         
         return items;
     }
@@ -846,14 +753,6 @@ class SettingsItem extends vscode.TreeItem {
 
         // 根据设置类型添加命令
         switch(type) {
-            case 'firmware-dir':
-                this.iconPath = new vscode.ThemeIcon('search');
-                this.command = {
-                    command: 'firmwareDownloader.find',
-                    title: '查找固件目录',
-                    arguments: []
-                };
-                break;
             case 'build-command':
                     this.iconPath = new vscode.ThemeIcon('coffee');
                     this.command = {
@@ -862,6 +761,14 @@ class SettingsItem extends vscode.TreeItem {
                         arguments: []
                     };
                     break;
+            case 'firmware-settings':
+                this.iconPath = new vscode.ThemeIcon('gear');
+                this.command = {
+                    command: 'firmwareDownloader.settings',
+                    title: '插件设置',
+                    arguments: []
+                };
+                break;
         }
     }
 }
@@ -1126,23 +1033,6 @@ function kill_process_tree(child_process, signal = 'SIGKILL') {
     });
 }
 
-function create_ini_file(ini_path) 
-{ 
-    output_chan.appendLine(`create ${ini_file_name} file`);
-    fs.writeFileSync(ini_path,  '# [Quick Firmware +] \r\n');
-    fs.appendFileSync(ini_path, '[version]\r\n');
-    fs.appendFileSync(ini_path, `ver=${version}\r\n`);
-    fs.appendFileSync(ini_path, '[download]\r\n');
-    fs.appendFileSync(ini_path, 'uri=\r\n');
-    fs.appendFileSync(ini_path, '[build]\r\n');
-    fs.appendFileSync(ini_path, 'cmd=\r\n');
-    fs.appendFileSync(ini_path, 'create=false\r\n');
-    // 添加AT命令配置段
-    fs.appendFileSync(ini_path, '[at_commands]\r\n');
-    fs.appendFileSync(ini_path, 'cmd_path1=\n');
-
-}
-
 function activate(context) 
 {
     // 下载信息
@@ -1169,28 +1059,8 @@ function activate(context)
     status_bar_dl.command = "firmwareDownloader.download";
     status_bar_dl.show();
 
-    // 创建配置文件
-    let ini_path = null;
-    let ini_ver  = null;
+    // 不再创建 ini 文件，直接使用 VSCode 配置
     const workspace_folders = vscode.workspace.workspaceFolders;
-    if (workspace_folders && workspace_folders.length > 0) { 
-        ini_path = path.join(workspace_folders[0].uri.fsPath, ini_file_name);
-        if (!fs.existsSync(ini_path)) { 
-            create_ini_file(ini_path);
-        } else {
-            const ini_file = ini.parse(fs.readFileSync(ini_path, 'utf-8'));
-            // output_chan.appendLine(`work space ini file:${ini_file}`);
-            if ('version' in ini_file) {
-                ini_ver = ini_file['version']['ver'];
-            }
-            if (ini_ver == null || ini_ver != version) { 
-                output_chan.appendLine(`work space ini file use new version: ${version}`);
-                // 创建新版本ini文件
-                fs.unlinkSync(ini_path);
-                create_ini_file(ini_path);
-            }
-        }
-    }
 
     // 创建固件管理器侧边栏
     const firmwareTreeDataProvider = new FirmwareTreeDataProvider();
@@ -1260,33 +1130,25 @@ function activate(context)
         const result = await vscode.window.showOpenDialog(options);
         if (result && result.length > 0) {
             const selectedPath = result[0].fsPath;
-            if ( ini_path != null && fs.existsSync(ini_path)) { 
-                const ini_file = ini.parse(fs.readFileSync(ini_path, 'utf-8'));
-                ini_file['download']['uri'] = selectedPath;
-                fs.writeFileSync(ini_path, ini.stringify(ini_file)); 
-                vscode.commands.executeCommand('firmwareDownloader.refresh');
-            }
+            // 更新 VS Code 配置
+            const config = get_configuration();
+            await config.update('firmwarePath', selectedPath, vscode.ConfigurationTarget.Workspace);
+            vscode.commands.executeCommand('firmwareDownloader.refresh');
         }
     });
 
     // 注册清除选择固件目录命令
     const clearFirmwareDirCommand = vscode.commands.registerCommand('firmwareDownloader.clear', async () => {
-        if ( ini_path != null && fs.existsSync(ini_path)) { 
-            const ini_file = ini.parse(fs.readFileSync(ini_path, 'utf-8'));
-            ini_file['download']['uri'] = '';
-            fs.writeFileSync(ini_path, ini.stringify(ini_file)); 
-            vscode.commands.executeCommand('firmwareDownloader.refresh');
-        }
+        // 清除 VS Code 配置
+        const config = get_configuration();
+        await config.update('firmwarePath', '', vscode.ConfigurationTarget.Workspace);
+        vscode.commands.executeCommand('firmwareDownloader.refresh');
     });
  
     // 注册指定构建命令参数命令
     const buildCommandArgsCommand = vscode.commands.registerCommand('firmwareDownloader.buildCommand', async () => {
-        if (!ini_path || !fs.existsSync(ini_path)) {
-            vscode.window.showErrorMessage('配置文件不存在');
-            return;
-        }
-        const ini_file = ini.parse(fs.readFileSync(ini_path, 'utf-8'));
-        const current_cmd = ini_file['build']['cmd'] || '';
+        const config = get_configuration();
+        const current_cmd = config.get('buildCommand') || '';
 
         const input = await vscode.window.showInputBox({
             prompt: '请输入构建命令',
@@ -1296,9 +1158,8 @@ function activate(context)
         if (input === undefined) { // 用户取消输入
             return;
         }
-        // 更新配置文件
-        ini_file['build']['cmd'] = input;
-        fs.writeFileSync(ini_path, ini.stringify(ini_file));
+        // 更新 VS Code 配置
+        await config.update('buildCommand', input, vscode.ConfigurationTarget.Workspace);
       
         vscode.commands.executeCommand('firmwareDownloader.refresh');
     });
@@ -1323,23 +1184,10 @@ function activate(context)
     // 注册构建命令
     let build_disposable = vscode.commands.registerCommand('firmwareDownloader.build', async function () {
 
-        let build_cmd = null;
-        let build_args = null;
-        let terminal_create = false;
+        const config = get_configuration();
+        let build_args = config.get('buildCommand') || '';
         let is_bash = false;
         let bash_run = "C:\\Program Files\\Git\\bin\\bash.exe";
-
-        if ( ini_path != null && fs.existsSync(ini_path)) { 
-            const ini_file = ini.parse(fs.readFileSync(ini_path, 'utf-8'));
-            if ('build' in ini_file) {
-                build_cmd = ini_file['build']['cmd'];
-                terminal_create = ini_file['build']['create']; 
-                output_chan.appendLine(`build cmd: ${build_cmd} terminal create:${terminal_create}`);
-            }
-            if (build_cmd) {
-                build_args = build_cmd;
-            }
-        }
         
         // 默认选择bulid OPT.bat
         if (!build_args) { 
@@ -1423,17 +1271,6 @@ function activate(context)
                 });
             });
             vscode.window.showInformationMessage(`构建任务结束`);
-
-            if (terminal_create == true) { 
-                last_dl_info.terminal = vscode.window.createTerminal({
-                    name: "build firmware",
-                    shellPath: is_windows() ? 'cmd.exe' : '/bin/bash'
-                });
-                last_dl_info.terminal.show();
-                last_dl_info.terminal.sendText('', false);
-                // 向终端输入build firmware原始命令
-                last_dl_info.terminal.sendText(`${task_definition.command} ${task_definition.args.join(' ') }`, false);
-            }
             // 刷新固件列表
             firmwareTreeDataProvider.refresh();
         } catch (error) {
@@ -1456,14 +1293,13 @@ function activate(context)
                 output_chan.appendLine(`selected_uri: ${selected_uri}`);
                 // 从配置文件载入
                 if (!selected_uri) {
-                    if ( ini_path != null && fs.existsSync(ini_path)) { 
-                        const ini_file = ini.parse(fs.readFileSync(ini_path, 'utf-8'));
-                        let ini_uri = ini_file['download']['uri'];
-                        output_chan.appendLine(`ini uri: ${ini_uri}`);
-                        if (fs.existsSync(ini_uri)) {
-                            selected_uri = vscode.Uri.file(ini_uri);
-                            output_chan.appendLine(`selected_uri: ${selected_uri}`);
-                        }
+                    // 优先从 VS Code 配置读取
+                    const config = get_configuration();
+                    let config_uri = config.get('firmwarePath');
+                    output_chan.appendLine(`config uri: ${config_uri}`);
+                    if (fs.existsSync(config_uri)) {
+                        selected_uri = vscode.Uri.file(config_uri);
+                        output_chan.appendLine(`selected_uri: ${selected_uri}`);
                     }
                 }
 

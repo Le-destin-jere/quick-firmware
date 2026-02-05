@@ -150,6 +150,30 @@
           "when": "view == firmware-explorer && viewItem == firmware-file"
         }
       ]
+    },
+    "configuration": {
+      "title": "Quick Firmware +",
+      "properties": {
+        "quickFirmwarePlus.firmwarePath": {
+          "type": "string",
+          "default": "",
+          "description": "固件目录路径"
+        },
+        "quickFirmwarePlus.buildCommand": {
+          "type": "string",
+          "default": "",
+          "description": "构建命令"
+        },
+        "quickFirmwarePlus.atCommandPaths": {
+          "type": "array",
+          "default": [],
+          "description": "AT命令配置文件路径列表",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20
+        }
+      }
     }
   }
 }
