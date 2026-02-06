@@ -295,64 +295,72 @@ body {
     width: 100%; /* 确保下拉菜单宽度占满 */
 }
 
-.at-config-selector {
+/* AT配置标签式导航样式 */
+.at-config-tabs {
+    display: flex;
+    flex-direction: row;
+    justify-content: left;
+    overflow-x: hidden; 
+    overflow-y: hidden;  
     width: 100%;
-    min-width: 160px;
-    padding: 6px 10px;
+    min-height: 40px;
     border: 1px solid var(--border-color);
     border-radius: 4px;
     background-color: var(--panel-background);
-    color: var(--text-color);
-    font-size: 13px;
+    padding: 2px;
+    /* 隐藏滚动条*/
+    -ms-overflow-style: none;  /* IE和Edge */
+    scrollbar-width: none;     /* Firefox */
+    margin: 0 auto;
+}
+
+.at-config-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.at-config-tabs-content {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.at-config-tab {
+    padding: 6px 6px;
+    margin: 2px;
+    border-radius: 4px;
     cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
     transition: all 0.2s ease;
-}
-
-.light-theme .at-config-selector {
-    background-color: #f0f0f0;
-    color: var(--text-color);
-    border: 1px solid var(--border-color);
-}
-
-.at-config-selector:hover {
-    background-color: var(--select-bg);
-    border-color: var(--primary-color);
-}
-
-.light-theme .at-config-selector:hover {
-    background-color: #e6e6e6;
-    border-color: var(--primary-color);
-}
-
-.at-config-selector:focus {
-    outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
-}
-
-.light-theme .at-config-selector:focus {
-    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
-}
-
-.at-config-selector option {
-    background-color: var(--panel-background);
-    color: var(--text-color);
-    padding: 6px 10px;
+    background-color: transparent;
     border: none;
-    border-radius: 3px;
-}
-
-.light-theme .at-config-selector option {
-    background-color: #ffffff;
     color: var(--text-color);
+    min-width: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.at-config-selector option:hover {
+.at-config-tab:hover {
     background-color: var(--select-bg);
 }
 
-.light-theme .at-config-selector option:hover {
-    background-color: #ecf5ff;
+.at-config-tab.active {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.light-theme .at-config-tab {
+    color: var(--text-color);
+}
+
+.light-theme .at-config-tab:hover {
+    background-color: #e6e6e6;
+}
+
+.light-theme .at-config-tab.active {
+    background-color: var(--primary-color);
+    color: white;
 }
 
 #atCommandsList {

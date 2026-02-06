@@ -16,15 +16,15 @@ const SerialDebug = {
     
     // 初始化串口调试界面
     init: function() {
-        this.loadAtCommands();
-        
-        // 添加加载配置列表
+ 
         if (vscode) {
             vscode.postMessage({
                 command: 'loadAtConfigList'
             });
         }
-        
+
+        this.loadAtCommands();
+
         this.setupEventListeners();
         
         this.requestPorts();
@@ -66,17 +66,14 @@ const SerialDebug = {
             }
         });
         
-        // 添加AT配置选择器事件监听
-        document.getElementById('atConfigSelector').addEventListener('change', (e) => {
-            const configName = e.target.value;
-            if (configName && vscode) {
-                vscode.postMessage({
-                    command: 'loadAtCommands',
-                    configName: configName
-                });
-            }
+        // 添加鼠标滚轮事件监听器到标签容器
+        const tabsContainer = document.getElementById('atConfigTabs');
+        tabsContainer.addEventListener('wheel', (e) => {
+            e.preventDefault(); // 阻止默认滚动行为
+            // 根据滚轮移动方向水平滚动
+            tabsContainer.scrollLeft += e.deltaY;
         });
-        
+
         // Enter键发送数据
         document.getElementById('sendText').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -343,18 +340,37 @@ const SerialDebug = {
     
     // 更新AT命令配置列表
     updateAtConfigList: function(configs) {
-        const selector = document.getElementById('atConfigSelector');
-        
-        // 清空现有选项
-        selector.innerHTML = '';
-        
-        // 添加其他配置项
+        const tabsContainer = document.getElementById('atConfigTabs');
+        const existingTabs = tabsContainer.querySelectorAll('.at-config-tab');
+        existingTabs.forEach(tab => tab.remove());
+        // 添加配置项为标签页
         configs.forEach(config => {
-            const option = document.createElement('option');
-            option.value = config.name;
-            option.textContent = config.displayName || config.name;
-            selector.appendChild(option);
+            const tab = document.createElement('button');
+            tab.className = 'at-config-tab';
+            tab.textContent = config.displayName || config.name;
+            tab.dataset.configName = config.name;
+            // 添加点击事件
+            tab.addEventListener('click', (e) => {
+                const activeTabs = tabsContainer.querySelectorAll('.at-config-tab');
+                activeTabs.forEach(t => t.classList.remove('active'));
+                e.currentTarget.classList.add('active');
+                // 发送消息到vscode
+                if (vscode) {
+                    vscode.postMessage({
+                        command: 'loadAtCommands',
+                        configName: config.name
+                    });
+                }
+            });
+            tabsContainer.appendChild(tab);
         });
+        // 如果已有选中的配置，则更新标签选中状态
+        setTimeout(() => {
+            const firstTab = tabsContainer.querySelector('.at-config-tab');
+            if (firstTab) {
+                firstTab.click(); // 自动选择第一个标签
+            }
+        }, 0);
     },
     
     // 编辑AT命令
@@ -417,7 +433,19 @@ const SerialDebug = {
             }
             
             // 通知后端更新命令，传递序号信息
-            const currentConfig = document.getElementById('atConfigSelector').value;
+            // 由于下拉框已移除，改为获取第一个可用配置或当前激活的标签
+            const activeTab = document.querySelector('.at-config-tab.active');
+            let currentConfig = '';
+            if (activeTab) {
+                currentConfig = activeTab.dataset.configName;
+            } else {
+                // 如果没有激活的标签，尝试获取第一个标签
+                const firstTab = document.querySelector('.at-config-tab');
+                if (firstTab) {
+                    currentConfig = firstTab.dataset.configName;
+                }
+            }
+            
             if (vscode) {
                 vscode.postMessage({
                     command: 'updateAtCommand',

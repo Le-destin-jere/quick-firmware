@@ -202,18 +202,19 @@ async function handleWebviewMessage(message, panelIndex, quickSerial) {
             }
             break;
         case 'loadAtCommands':
-            loadAtCommandsFromIni(message.configName || null);
+            loadAtCommandsFromIni(message.configName || null, serialPanels[panelIndex]);
             break;
         case 'loadAtConfigList':
             loadAtConfigList();
             break;
         case 'updateAtCommand':
-            // 修改：接收并传递commandIndex参数
+            // 修改：接收并传递commandIndex和panelIndex参数
             updateAtCommand(
                 message.oldCommand, 
                 message.newCommand, 
                 message.configName, 
-                message.commandIndex
+                message.commandIndex,
+                panelIndex
             );
             break;
         case 'saveLog':
@@ -224,16 +225,13 @@ async function handleWebviewMessage(message, panelIndex, quickSerial) {
 
 // 加载AT命令配置列表
 function loadAtConfigList() {
-
-    // 从 VS Code 配置读取cmd_path
     const config = get_configuration();
     const atCommandPaths = config.get('atCommandPaths') || [];
-    // 遍历路径数组
     const configs = [];
     atCommandPaths.forEach((cmdPath) => {
         if (cmdPath && cmdPath.trim() !== '') {
             if (fs.existsSync(cmdPath)) {
-                const fileName = path.basename(cmdPath, '.ini');
+                const fileName = path.basename(cmdPath, '.ini').toUpperCase().substring(0, 5);
                 configs.push({
                     name: `file:${cmdPath}`,
                     displayName: `${fileName}`
@@ -241,15 +239,12 @@ function loadAtConfigList() {
             }
         }
     });
-
     sendAtConfigListToWebview(configs);
 }
 
 // 提取公共的INI文件解析函数
 function parseAtCommandsFromIni(iniFile) {
     let atCommands = [];
-    
-    // 检查是否有数字键格式的命令（如[1], [2]等）
     const numericSections = Object.keys(iniFile).filter(key => 
         !isNaN(key) && typeof iniFile[key] === 'object' && key !== 'SET'
     );
@@ -273,7 +268,7 @@ function parseAtCommandsFromIni(iniFile) {
 }
 
 // webview request load AT command list
-function loadAtCommandsFromIni(configName = null) {
+function loadAtCommandsFromIni(configName = null, targetPanel = null) {
 
     let iniPath;
     let atCommands = [];
@@ -284,7 +279,6 @@ function loadAtCommandsFromIni(configName = null) {
     if (!fs.existsSync(iniPath)) {
         return;
     }
-    // 如果找到了目标路径，只加载该文件
     if (iniPath && fs.existsSync(iniPath)) {
         try {
             const iniFile = ini.parse(fs.readFileSync(iniPath, 'utf-8'));
@@ -293,12 +287,11 @@ function loadAtCommandsFromIni(configName = null) {
             console.error('Error loading AT commands from external file:', error);
         }
     }
-    
-    sendAtCommandsToWebview(atCommands);
+    sendAtCommandsToWebview(atCommands, targetPanel);
 }
 
 // webview request update AT command
-function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex = -1) {
+function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex = -1, panelIndex = null) {
 
     let iniPath;
     // 检查是否是外部文件配置
@@ -315,7 +308,6 @@ function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex
         const numericSections = Object.keys(iniFile).filter(key => 
             !isNaN(key) && typeof iniFile[key] === 'object' && key !== 'SET'
         );
-        
         if (numericSections.length > 0) {
             // 根据序号排序
             numericSections.sort((a, b) => parseInt(a) - parseInt(b));
@@ -325,51 +317,19 @@ function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex
                 iniFile[targetSection]['CMD'] = newCommand;
                 updated = true;
             }
-            // 如果没有提供commandIndex（兼容旧版本），则回退到按值匹配的方式
-            else if (commandIndex === -1) {
-                // 找到oldCommand在命令列表中的索引位置
-                let foundIndex = -1;
-                let currentIndex = 0;
-                for (const sectionKey of numericSections) {
-                    const cmdValue = iniFile[sectionKey]['CMD'];
-                    let currentCmd = '';
-                    if (typeof cmdValue === 'string') {
-                        currentCmd = cmdValue;
-                    }
-                    else if (cmdValue === undefined || cmdValue === null) {
-                        currentCmd = '';
-                    }
-                    if (currentCmd === oldCommand) {
-                        foundIndex = currentIndex;
-                        break;
-                    }
-                    currentIndex++;
-                }
-                
-                if (foundIndex !== -1 && foundIndex < numericSections.length) {
-                    const targetSection = numericSections[foundIndex];
-                    iniFile[targetSection]['CMD'] = newCommand;
-                    updated = true;
-                }
-            }
         }
-        
         if (updated) {
             fs.writeFileSync(iniPath, ini.stringify(iniFile));
             console.log(`Updated AT command from "${oldCommand}" to "${newCommand}" in file: ${iniPath}`);
-            
-            // 修改：如果在WebView中打开了串口面板，重新加载AT命令（向所有面板发送）
-            serialPanels.forEach(panel => {
-                if (panel && panel.webview) {
-                    loadAtCommandsFromIni(configName || null);
-                }
-            });
+            // 修改：只向当前面板发送更新后的AT命令，而不是所有面板
+            if (panelIndex !== null && serialPanels[panelIndex]) {
+                loadAtCommandsFromIni(configName || null, serialPanels[panelIndex]);
+            }
         } else {
-            console.warn(`Old command not found or invalid index: "${oldCommand}", index: ${commandIndex}`);
+            console.log(`Could not find AT command "${oldCommand}" to update in file: ${iniPath}`);
         }
-        
     } catch (error) {
-        console.error('Error updating AT command:', error);
+        console.error('Error updating AT command in file:', error);
     }
 }
 
@@ -387,16 +347,27 @@ function sendAtConfigListToWebview(configs) {
 }
 
 // 发送AT命令到WebView
-function sendAtCommandsToWebview(commands) {
-    // 修改：向所有串口面板实例发送消息
-    serialPanels.forEach(panel => {
-        if (panel && panel.webview) {
-            panel.webview.postMessage({
+function sendAtCommandsToWebview(commands, targetPanel = null) {
+    // 修改：可以选择性地只向特定面板发送消息
+    if (targetPanel) {
+        // 只向指定面板发送消息
+        if (targetPanel && targetPanel.webview) {
+            targetPanel.webview.postMessage({
                 command: 'displayAtCommands',
                 commands: commands
             });
         }
-    });
+    } else {
+        // 向所有串口面板实例发送消息
+        serialPanels.forEach(panel => {
+            if (panel && panel.webview) {
+                panel.webview.postMessage({
+                    command: 'displayAtCommands',
+                    commands: commands
+                });
+            }
+        });
+    }
 }
 
 // 保存串口日志
