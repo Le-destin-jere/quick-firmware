@@ -92,10 +92,10 @@ function createSerialDebugPanel() {
     panel.webview.onDidReceiveMessage((message) => {
         handleWebviewMessage(message, panelIndex, quickSerial);
     });
-    
-    // 面板创建后，加载AT命令配置列表和AT命令
+
+    // 面板创建后 AT命令配置列表
     loadAtConfigList();
-    loadAtCommandsFromIni();
+  
 }
 
 // 获取WebView HTML内容
@@ -228,7 +228,6 @@ function loadAtConfigList() {
     // 从 VS Code 配置读取cmd_path
     const config = get_configuration();
     const atCommandPaths = config.get('atCommandPaths') || [];
-    
     // 遍历路径数组
     const configs = [];
     atCommandPaths.forEach((cmdPath) => {
@@ -273,33 +272,32 @@ function parseAtCommandsFromIni(iniFile) {
     return atCommands;
 }
 
-// 从INI文件加载AT命令
+// webview request load AT command list
 function loadAtCommandsFromIni(configName = null) {
 
+    let iniPath;
     let atCommands = [];
-    // 修改：如果没有指定配置名称，也尝试从主配置文件的cmd_path加载
-    const config = get_configuration();
-    const atCommandPaths = config.get('atCommandPaths') || [];
-    
-    // 从VS Code配置加载
-    for (const cmdPath of atCommandPaths) {
-        if (cmdPath && cmdPath.trim() !== '') {
-            if (fs.existsSync(cmdPath)) {
-                try {
-                    const externalIniFile = ini.parse(fs.readFileSync(cmdPath, 'utf-8'));
-                    const externalAtCommands = parseAtCommandsFromIni(externalIniFile);
-                    atCommands = atCommands.concat(externalAtCommands);
-                } catch (error) {
-                    console.error('Error loading AT commands from external file:', error);
-                }
-            }
+ 
+    if (configName && configName.startsWith('file:')) {
+        iniPath = configName.substring(5); // 移除 'file:' 前缀
+    } 
+    if (!fs.existsSync(iniPath)) {
+        return;
+    }
+    // 如果找到了目标路径，只加载该文件
+    if (iniPath && fs.existsSync(iniPath)) {
+        try {
+            const iniFile = ini.parse(fs.readFileSync(iniPath, 'utf-8'));
+            atCommands = parseAtCommandsFromIni(iniFile);
+        } catch (error) {
+            console.error('Error loading AT commands from external file:', error);
         }
     }
     
     sendAtCommandsToWebview(atCommands);
 }
 
-// 更新AT命令
+// webview request update AT command
 function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex = -1) {
 
     let iniPath;
@@ -307,11 +305,9 @@ function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex
     if (configName && configName.startsWith('file:')) {
         iniPath = configName.substring(5); // 移除 'file:' 前缀
     } 
-
     if (!fs.existsSync(iniPath)) {
         return;
     }
-
     try {
         const iniFile = ini.parse(fs.readFileSync(iniPath, 'utf-8'));
         let updated = false;
@@ -343,7 +339,6 @@ function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex
                     else if (cmdValue === undefined || cmdValue === null) {
                         currentCmd = '';
                     }
-                    
                     if (currentCmd === oldCommand) {
                         foundIndex = currentIndex;
                         break;
@@ -372,6 +367,7 @@ function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex
         } else {
             console.warn(`Old command not found or invalid index: "${oldCommand}", index: ${commandIndex}`);
         }
+        
     } catch (error) {
         console.error('Error updating AT command:', error);
     }
@@ -615,11 +611,7 @@ class DeviceTreeDataProvider {
             if (is_windows()) {
                 //Windows环境下使用wmic命令获取USB设备
                 const command_dflt     = 'wmic path Win32_PnPEntity where "Name like \'%USB%\' OR Name like \'%Quectel%\'" get Name';
-                const command_filter_q = 'wmic path Win32_PnPEntity where "Name like \'%Quectel%\'" get Name';
                 let command = command_dflt;
-                if (this.filter_filled) {
-                    command = command_filter_q;
-                }
                 const { spawn } = require('child_process');
                 return new Promise((resolve) => {
                     // 使用wmic获取USB设备信息
@@ -690,10 +682,10 @@ class DeviceItem extends vscode.TreeItem {
     constructor(label, description, collapsibleState) {
         super(label, collapsibleState);
         this.description = description;
-        this.tooltip = `打开QCOM`;
+        this.tooltip = `Quick Serial`;
         this.command = {
-            command: 'firmwareDownloader.qcomOpen',
-            title: '打开QCOM'
+            command: 'firmwareDownloader.serial',
+            title: 'Quick Serial'
         };
         this.iconPath = new vscode.ThemeIcon('plug');
     }
@@ -1087,37 +1079,6 @@ function activate(context)
         deviceTreeDataProvider.refresh();
     });
 
-    // 注册过滤设备列表命令
-    const filterDevicesCommand = vscode.commands.registerCommand('firmwareDownloader.devices_filter', () => {
-        deviceTreeDataProvider.filter_filled = true;
-        vscode.commands.executeCommand('setContext', 'firmware.devices.filterApplied', true);
-        deviceTreeDataProvider.refresh();
-    });
-
-    // 注册取消过滤设备列表命令
-    const filterCancelDevicesCommand = vscode.commands.registerCommand('firmwareDownloader.devices_filter_cancel', () => {
-        deviceTreeDataProvider.filter_filled = false;
-        vscode.commands.executeCommand('setContext', 'firmware.devices.filterApplied', false);
-        deviceTreeDataProvider.refresh();
-    });
-
-    // 注册QCOM打开工具命令
-    const qcomOpenCommand = vscode.commands.registerCommand('firmwareDownloader.qcomOpen', () => {
-        // 直接打开 tools 目录下的QCOM.exe
-        const extension_path = context.extensionPath;
-        const tools_path = path.join(extension_path, 'tools');
-        const qcom_path = path.join(tools_path, 'QCOM.exe');
-        if (fs.existsSync(qcom_path)) {
-            output_chan.appendLine(`open ${qcom_path}`);
-            // 直接运行QCOM.exe，不通过shell，不等待也不捕获输出
-            spawn(qcom_path, [], { 
-                stdio: 'ignore',
-                detached: true,
-                windowsHide: true
-            });
-        }
-    });
-
     // 注册选择固件目录命令
     const selectFirmwareDirCommand = vscode.commands.registerCommand('firmwareDownloader.find', async () => {
         const options = {
@@ -1177,8 +1138,13 @@ function activate(context)
     });
     
     // 注册串口调试命令
-    const openSerialDebugCommand = vscode.commands.registerCommand('firmwareDownloader.serial', () => {
+    const openSerialCommand = vscode.commands.registerCommand('firmwareDownloader.serial', () => {
         createSerialDebugPanel();
+    });
+    
+    // 注册设置命令
+    const openSettingsCommand = vscode.commands.registerCommand('firmwareDownloader.settings', () => {
+        vscode.commands.executeCommand('workbench.action.openSettings', 'quickFirmwarePlus');
     });
 
     // 注册构建命令
@@ -1625,12 +1591,10 @@ function activate(context)
     context.subscriptions.push(selectFirmwareDirCommand);
     context.subscriptions.push(clearFirmwareDirCommand);
     context.subscriptions.push(refreshDevicesCommand);
-    context.subscriptions.push(qcomOpenCommand);
-    context.subscriptions.push(filterDevicesCommand);
-    context.subscriptions.push(filterCancelDevicesCommand);
     context.subscriptions.push(buildCommandArgsCommand);
     context.subscriptions.push(copyPathCommand);
-    context.subscriptions.push(openSerialDebugCommand);
+    context.subscriptions.push(openSerialCommand);
+    context.subscriptions.push(openSettingsCommand);
 
     context.subscriptions.push(build_disposable);
     context.subscriptions.push(download_disposable);

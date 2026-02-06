@@ -3,7 +3,7 @@
   * bash build fix (1903S).
   * others some changes.
   
-## 0.2.4 / 2025-12-31
+## 0.2.5 / 2025-12-31
   * views containers support.
   
 ## 0.2.3 / 2025-12-15

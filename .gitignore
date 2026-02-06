@@ -1,5 +1,7 @@
 .venv/
+.vscode/
 tools/
 firmware+.ini
 *.vsix
-.vscode/settings.json
+
+

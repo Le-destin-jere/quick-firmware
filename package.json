@@ -2,7 +2,7 @@
   "name": "quick-firmware-plus",
   "displayName": "Quick Firmware +",
   "description": "协助编译生成和固件下载",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "publisher": "destin.zhang",
   "icon": "images/icon.png",
   "galleryBanner": {
@@ -89,18 +89,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "firmwareDownloader.devices_filter",
-        "title": "设备过滤",
-        "icon": "$(filter)",
-        "enablement": "!firmware.devices.filterApplied"
-      },
-      {
-        "command": "firmwareDownloader.devices_filter_cancel",
-        "title": "取消设备过滤",
-        "icon": "$(filter-filled)",
-        "enablement": "firmware.devices.filterApplied"
-      },
-      {
         "command": "firmwareDownloader.serial",
         "title": "串口调试工具",
         "icon": "$(plug)"
@@ -126,16 +114,6 @@
         {
           "command": "firmwareDownloader.devices_refresh",
           "when": "view == firmware-devices",
-          "group": "navigation"
-        },
-        {
-          "command": "firmwareDownloader.devices_filter",
-          "when": "view == firmware-devices && !firmware.devices.filterApplied",
-          "group": "navigation"
-        },
-        {
-          "command": "firmwareDownloader.devices_filter_cancel",
-          "when": "view == firmware-devices && firmware.devices.filterApplied",
           "group": "navigation"
         },
         {
