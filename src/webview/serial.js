@@ -74,6 +74,12 @@ const SerialDebug = {
             tabsContainer.scrollLeft += e.deltaY;
         });
 
+        // 添加添加AT命令标签按钮事件监听
+        const addTabButton = document.getElementById('addAtCommandTab');
+        if (addTabButton) {
+            addTabButton.addEventListener('click', () => this.addNewAtCommandTab());
+        }
+
         // Enter键发送数据
         document.getElementById('sendText').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -101,13 +107,31 @@ const SerialDebug = {
                 this.saveAtCommand(e.target);
             }
         });
-        
-        // 使用focusout代替blur，因为blur事件不会冒泡
-        document.getElementById('atCommandsList').addEventListener('focusout', (e) => {
-            if (e.target.tagName === 'INPUT') {
-                this.saveAtCommand(e.target);
-            }
-        });
+    },
+
+    /**
+     * 添加新的AT命令标签页
+     */
+    addNewAtCommandTab: function() {
+        // 向后端发送消息请求创建新的AT命令配置
+        if (vscode) {
+            vscode.postMessage({
+                command: 'createNewAtConfig'
+            });
+        }
+    },
+
+    /**
+     * 加载AT命令列表
+     */
+    loadAtCommands: function(configName = null) {
+        // 从VSCode获取AT命令列表
+        if (vscode) {
+            vscode.postMessage({
+                command: 'loadAtCommands',
+                configName: configName
+            });
+        }
     },
     
     // 请求可用串口列表
@@ -464,16 +488,6 @@ const SerialDebug = {
             }
             inputElement.parentNode.replaceChild(span, inputElement);
             itemDiv.classList.remove('editing');
-        }
-    },
-    
-    // 加载AT命令
-    loadAtCommands: function() {
-        // 从VSCode获取AT命令列表
-        if (vscode) {
-            vscode.postMessage({
-                command: 'loadAtCommands'
-            });
         }
     },
     

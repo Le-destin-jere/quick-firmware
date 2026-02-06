@@ -217,6 +217,9 @@ async function handleWebviewMessage(message, panelIndex, quickSerial) {
                 panelIndex
             );
             break;
+        case 'createNewAtConfig':
+            createNewAtConfig(serialPanels[panelIndex]);
+            break;
         case 'saveLog':
             await saveSerialLog(message.content);
             break;
@@ -240,6 +243,43 @@ function loadAtConfigList() {
         }
     });
     sendAtConfigListToWebview(configs);
+}
+
+// 创建新的AT命令配置
+async function createNewAtConfig(targetPanel) {
+    try {
+        // 弹出文件对话框让用户选择.ini文件
+        const options = {
+            canSelectMany: false,
+            openLabel: '选择',
+            filters: {
+                'INI Files': ['ini'],
+                'All Files': ['*']
+            }
+        };
+        const fileUri = await vscode.window.showOpenDialog(options);
+        if (fileUri && fileUri[0]) {
+            const filePath = fileUri[0].fsPath;
+            if (!filePath.toLowerCase().endsWith('.ini')) {
+                vscode.window.showErrorMessage('请选择一个有效的.ini文件');
+                return;
+            }
+            const config = get_configuration();
+            let atCommandPaths = config.get('atCommandPaths') || [];
+            if (!atCommandPaths.includes(filePath)) {
+                atCommandPaths.push(filePath);
+                await config.update('atCommandPaths', atCommandPaths, vscode.ConfigurationTarget.Global);
+                // 重新加载配置列表并发送到webview
+                loadAtConfigList();
+                vscode.window.showInformationMessage('成功添加AT命令配置文件！');
+            } else {
+                vscode.window.showInformationMessage('该配置文件已存在！');
+            }
+        }
+    } catch (error) {
+        console.error('Error creating new AT config:', error);
+        vscode.window.showErrorMessage('创建新AT配置时发生错误');
+    }
 }
 
 // 提取公共的INI文件解析函数
