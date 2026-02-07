@@ -10,9 +10,22 @@ const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : nul
 const SerialDebug = {
     isOpen: false,
     currentTheme: 'dark', // 默认主题
+    isAutomationMode: false, // 自动化模式状态
     
     // AT命令历史，存储在全局状态中
     atCommands: [],
+    
+    // 自动化执行相关属性
+    automation: {
+        commands: [], // 自动化命令序列
+        isRunning: false,
+        isPaused: false,
+        currentStep: 0,
+        loopCount: 0,
+        totalLoops: 1,
+        startTime: null,
+        timer: null
+    },
     
     // 初始化串口调试界面
     init: function() {
@@ -29,6 +42,8 @@ const SerialDebug = {
         
         this.requestPorts();
         
+        // 初始化自动化功能
+        this.initAutomation();
     },
     
     // 设置事件监听器
@@ -46,6 +61,9 @@ const SerialDebug = {
         
         // 添加面板模式切换按钮事件监听
         document.getElementById('panelModeToggleBtn').addEventListener('click', () => this.togglePanelMode());
+        
+        // 添加自动化模式切换按钮事件监听
+        document.getElementById('automationModeToggleBtn').addEventListener('click', () => this.toggleAutomationMode());
         
         // 添加DTR和CTS事件监听
         document.getElementById('dtrCheckbox').addEventListener('change', (e) => {
@@ -107,6 +125,9 @@ const SerialDebug = {
                 this.saveAtCommand(e.target);
             }
         });
+        
+        // 添加自动化相关的事件监听
+        this.setupAutomationEventListeners();
     },
 
     /**
@@ -530,6 +551,23 @@ const SerialDebug = {
         }
     },
     
+    // 切换自动化模式
+    toggleAutomationMode: function() {
+        this.isAutomationMode = !this.isAutomationMode;
+        const mainContent = document.querySelector('.main-content');
+        const automationButton = document.getElementById('automationModeToggleBtn');
+        
+        if (this.isAutomationMode) {
+            mainContent.classList.add('automation-mode');
+            automationButton.title = '关闭自动化模式';
+            this.addLog('自动化模式已开启', 'info');
+        } else {
+            mainContent.classList.remove('automation-mode');
+            automationButton.title = '开启自动化模式';
+            this.addLog('自动化模式已关闭', 'info');
+        }
+    },
+
     // 切换面板模式
     togglePanelMode: function() {
         const mainContent = document.querySelector('.main-content');
@@ -579,6 +617,498 @@ const SerialDebug = {
                 document.getElementById('sendText').value = inputText;
                 this.sendData();
             }
+        }
+    },
+
+    /**
+     * 初始化自动化执行功能
+     */
+    initAutomation: function() {
+        // 从localStorage加载保存的自动化序列
+        const savedAutomation = localStorage.getItem('automationSequence');
+        if (savedAutomation) {
+            try {
+                this.automation.commands = JSON.parse(savedAutomation);
+                this.renderAutomationTrack();
+            } catch (e) {
+                console.error('Failed to load automation sequence:', e);
+                this.automation.commands = [];
+            }
+        }
+    },
+
+    /**
+     * 设置自动化相关的事件监听器
+     */
+    setupAutomationEventListeners: function() {
+        // 导入命令按钮
+        document.getElementById('importCommandsBtn').addEventListener('click', () => {
+            this.importSelectedCommands();
+        });
+
+        // 清空自动化序列按钮
+        document.getElementById('clearAutomationBtn').addEventListener('click', () => {
+            this.clearAutomationSequence();
+        });
+
+        // 开始执行按钮
+        document.getElementById('startAutomationBtn').addEventListener('click', () => {
+            this.startAutomation();
+        });
+
+        // 暂停执行按钮
+        document.getElementById('pauseAutomationBtn').addEventListener('click', () => {
+            this.pauseAutomation();
+        });
+
+        // 停止执行按钮
+        document.getElementById('stopAutomationBtn').addEventListener('click', () => {
+            this.stopAutomation();
+        });
+
+        // 设置拖拽功能
+        this.setupDragAndDrop();
+    },
+
+    /**
+     * 从AT命令列表导入选中的命令
+     */
+    importSelectedCommands: function() {
+        const atCommandItems = document.querySelectorAll('#atCommandsList .at-command-item');
+        const selectedCommands = [];
+        
+        atCommandItems.forEach(item => {
+            const span = item.querySelector('span');
+            const commandText = span ? span.textContent.trim() : '';
+            if (commandText && commandText !== '&nbsp;') {
+                selectedCommands.push({
+                    id: 'cmd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    command: commandText,
+                    delay: 1000,
+                    timeout: 5000,
+                    expectedResponse: null
+                });
+            }
+        });
+
+        if (selectedCommands.length === 0) {
+            this.addLog('没有可导入的AT命令', 'warning');
+            return;
+        }
+
+        // 添加到自动化序列
+        this.automation.commands.push(...selectedCommands);
+        this.renderAutomationTrack();
+        this.saveAutomationSequence();
+        this.addLog(`成功导入 ${selectedCommands.length} 个AT命令到自动化序列`, 'success');
+    },
+
+    /**
+     * 清空自动化序列
+     */
+    clearAutomationSequence: function() {
+        if (this.automation.commands.length > 0) {
+            if (confirm('确定要清空自动化序列吗？')) {
+                this.automation.commands = [];
+                this.renderAutomationTrack();
+                this.saveAutomationSequence();
+                this.addLog('自动化序列已清空', 'info');
+            }
+        } else {
+            this.addLog('自动化序列已经是空的', 'info');
+        }
+    },
+
+    /**
+     * 渲染自动化轨道
+     */
+    renderAutomationTrack: function() {
+        const track = document.getElementById('automationTrack');
+        track.innerHTML = '';
+
+        if (this.automation.commands.length === 0) {
+            track.innerHTML = '<div class="track-placeholder">拖拽AT命令到这里创建自动化序列</div>';
+            return;
+        }
+
+        this.automation.commands.forEach((cmd, index) => {
+            const commandElement = this.createAutomationCommandElement(cmd, index);
+            track.appendChild(commandElement);
+        });
+    },
+
+    /**
+     * 创建自动化命令元素
+     */
+    createAutomationCommandElement: function(command, index) {
+        const element = document.createElement('div');
+        element.className = 'automation-command-item';
+        element.draggable = true;
+        element.dataset.commandId = command.id;
+        element.dataset.index = index;
+
+        element.innerHTML = `
+            <div class="command-drag-handle" title="拖拽排序">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="5" r="1"></circle>
+                    <circle cx="9" cy="12" r="1"></circle>
+                    <circle cx="9" cy="19" r="1"></circle>
+                    <circle cx="15" cy="5" r="1"></circle>
+                    <circle cx="15" cy="12" r="1"></circle>
+                    <circle cx="15" cy="19" r="1"></circle>
+                </svg>
+            </div>
+            <div class="command-content">${this.escapeHtml(command.command)}</div>
+            <div class="command-settings">
+                <label>
+                    延迟:
+                    <input type="number" class="setting-input delay-input" value="${command.delay}" min="0" max="60000" data-field="delay">
+                    ms
+                </label>
+                <label>
+                    超时:
+                    <input type="number" class="setting-input timeout-input" value="${command.timeout}" min="100" max="30000" data-field="timeout">
+                    ms
+                </label>
+                <button class="remove-command-btn" title="移除命令">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        // 添加事件监听器
+        this.attachCommandElementEvents(element, command);
+        
+        return element;
+    },
+
+    /**
+     * 为命令元素添加事件监听器
+     */
+    attachCommandElementEvents: function(element, command) {
+        // 设置输入框事件
+        const delayInput = element.querySelector('.delay-input');
+        const timeoutInput = element.querySelector('.timeout-input');
+        
+        delayInput.addEventListener('change', (e) => {
+            command.delay = parseInt(e.target.value) || 1000;
+            this.saveAutomationSequence();
+        });
+        
+        timeoutInput.addEventListener('change', (e) => {
+            command.timeout = parseInt(e.target.value) || 5000;
+            this.saveAutomationSequence();
+        });
+
+        // 移除按钮事件
+        const removeBtn = element.querySelector('.remove-command-btn');
+        removeBtn.addEventListener('click', () => {
+            this.removeAutomationCommand(command.id);
+        });
+    },
+
+    /**
+     * 移除自动化命令
+     */
+    removeAutomationCommand: function(commandId) {
+        const index = this.automation.commands.findIndex(cmd => cmd.id === commandId);
+        if (index !== -1) {
+            this.automation.commands.splice(index, 1);
+            this.renderAutomationTrack();
+            this.saveAutomationSequence();
+            this.addLog('命令已从自动化序列中移除', 'info');
+        }
+    },
+
+    /**
+     * 设置拖拽功能
+     */
+    setupDragAndDrop: function() {
+        const track = document.getElementById('automationTrack');
+        
+        track.addEventListener('dragstart', (e) => {
+            if (e.target.classList.contains('automation-command-item')) {
+                e.target.classList.add('dragging');
+                e.dataTransfer.setData('text/plain', e.target.dataset.commandId);
+            }
+        });
+
+        track.addEventListener('dragend', (e) => {
+            if (e.target.classList.contains('automation-command-item')) {
+                e.target.classList.remove('dragging');
+            }
+        });
+
+        track.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            track.classList.add('drag-over');
+        });
+
+        track.addEventListener('dragleave', (e) => {
+            if (!track.contains(e.relatedTarget)) {
+                track.classList.remove('drag-over');
+            }
+        });
+
+        track.addEventListener('drop', (e) => {
+            e.preventDefault();
+            track.classList.remove('drag-over');
+            
+            const commandId = e.dataTransfer.getData('text/plain');
+            const targetElement = e.target.closest('.automation-command-item');
+            
+            if (commandId && targetElement) {
+                this.reorderAutomationCommands(commandId, targetElement.dataset.commandId);
+            }
+        });
+    },
+
+    /**
+     * 重新排序自动化命令
+     */
+    reorderAutomationCommands: function(sourceId, targetId) {
+        const sourceIndex = this.automation.commands.findIndex(cmd => cmd.id === sourceId);
+        const targetIndex = this.automation.commands.findIndex(cmd => cmd.id === targetId);
+        
+        if (sourceIndex !== -1 && targetIndex !== -1 && sourceIndex !== targetIndex) {
+            const [movedCommand] = this.automation.commands.splice(sourceIndex, 1);
+            this.automation.commands.splice(targetIndex, 0, movedCommand);
+            this.renderAutomationTrack();
+            this.saveAutomationSequence();
+            this.addLog('命令顺序已调整', 'info');
+        }
+    },
+
+    /**
+     * 保存自动化序列到localStorage
+     */
+    saveAutomationSequence: function() {
+        localStorage.setItem('automationSequence', JSON.stringify(this.automation.commands));
+    },
+
+    /**
+     * 开始自动化执行
+     */
+    startAutomation: function() {
+        if (this.automation.commands.length === 0) {
+            this.addLog('请先添加要执行的AT命令', 'error');
+            return;
+        }
+
+        if (!this.isOpen) {
+            this.addLog('请先连接串口', 'error');
+            return;
+        }
+
+        // 获取设置参数
+        const loopCount = parseInt(document.getElementById('loopCountInput').value) || 1;
+        const interval = parseInt(document.getElementById('commandIntervalInput').value) || 1000;
+
+        // 初始化执行状态
+        this.automation.isRunning = true;
+        this.automation.isPaused = false;
+        this.automation.currentStep = 0;
+        this.automation.loopCount = 0;
+        this.automation.totalLoops = loopCount;
+        this.automation.startTime = Date.now();
+
+        // 更新UI
+        this.updateAutomationUI('running');
+
+        // 开始执行
+        this.executeNextCommand();
+        
+        this.addLog(`自动化执行开始，共${loopCount === -1 ? '无限' : loopCount}次循环`, 'success');
+    },
+
+    /**
+     * 暂停自动化执行
+     */
+    pauseAutomation: function() {
+        this.automation.isPaused = true;
+        this.updateAutomationUI('paused');
+        this.addLog('自动化执行已暂停', 'warning');
+    },
+
+    /**
+     * 继续自动化执行
+     */
+    resumeAutomation: function() {
+        this.automation.isPaused = false;
+        this.updateAutomationUI('running');
+        this.executeNextCommand();
+        this.addLog('自动化执行继续', 'success');
+    },
+
+    /**
+     * 停止自动化执行
+     */
+    stopAutomation: function() {
+        this.automation.isRunning = false;
+        this.automation.isPaused = false;
+        if (this.automation.timer) {
+            clearTimeout(this.automation.timer);
+            this.automation.timer = null;
+        }
+        this.updateAutomationUI('stopped');
+        this.addLog('自动化执行已停止', 'info');
+    },
+
+    /**
+     * 执行下一个命令
+     */
+    executeNextCommand: function() {
+        if (!this.automation.isRunning || this.automation.isPaused) {
+            return;
+        }
+
+        // 检查是否完成所有循环
+        if (this.automation.totalLoops !== -1 && 
+            this.automation.loopCount >= this.automation.totalLoops) {
+            this.stopAutomation();
+            this.addLog('自动化执行完成', 'success');
+            return;
+        }
+
+        // 检查是否完成当前循环
+        if (this.automation.currentStep >= this.automation.commands.length) {
+            this.automation.loopCount++;
+            this.automation.currentStep = 0;
+            
+            if (this.automation.totalLoops !== -1) {
+                this.addLog(`第${this.automation.loopCount}次循环完成`, 'info');
+            }
+            
+            // 如果还有循环次数，继续执行
+            if (this.automation.totalLoops === -1 || this.automation.loopCount < this.automation.totalLoops) {
+                const interval = parseInt(document.getElementById('commandIntervalInput').value) || 1000;
+                this.automation.timer = setTimeout(() => {
+                    this.executeNextCommand();
+                }, interval);
+            } else {
+                this.stopAutomation();
+                this.addLog('自动化执行完成', 'success');
+            }
+            return;
+        }
+
+        // 执行当前命令
+        const command = this.automation.commands[this.automation.currentStep];
+        this.highlightCurrentCommand(this.automation.currentStep);
+        this.updateProgress();
+        
+        this.addLog(`执行: ${command.command}`, 'info');
+        
+        // 发送命令
+        if (vscode) {
+            vscode.postMessage({
+                command: 'sendData',
+                data: command.command,
+                isHex: false
+            });
+        }
+
+        // 设置超时检查
+        this.automation.timer = setTimeout(() => {
+            this.addLog(`命令超时: ${command.command}`, 'error');
+            this.automation.currentStep++;
+            this.executeNextCommand();
+        }, command.timeout);
+
+        // 延迟执行下一个命令
+        setTimeout(() => {
+            if (this.automation.timer) {
+                clearTimeout(this.automation.timer);
+                this.automation.timer = null;
+            }
+            this.automation.currentStep++;
+            this.executeNextCommand();
+        }, command.delay);
+    },
+
+    /**
+     * 高亮显示当前执行的命令
+     */
+    highlightCurrentCommand: function(stepIndex) {
+        // 移除之前的高亮
+        document.querySelectorAll('.automation-command-item').forEach(item => {
+            item.style.border = '1px solid var(--border-color)';
+            item.style.backgroundColor = 'var(--select-bg)';
+        });
+
+        // 高亮当前命令
+        const currentItem = document.querySelector(`.automation-command-item[data-index="${stepIndex}"]`);
+        if (currentItem) {
+            currentItem.style.border = '2px solid var(--primary-color)';
+            currentItem.style.backgroundColor = 'var(--at-command-item-hover)';
+        }
+    },
+
+    /**
+     * 更新执行进度
+     */
+    updateProgress: function() {
+        const totalSteps = this.automation.commands.length * 
+                          (this.automation.totalLoops === -1 ? 1 : this.automation.totalLoops);
+        const currentStep = this.automation.loopCount * this.automation.commands.length + 
+                           this.automation.currentStep;
+        const progress = totalSteps > 0 ? (currentStep / totalSteps) * 100 : 0;
+
+        const progressBar = document.querySelector('.progress-fill');
+        const progressText = document.querySelector('.progress-text');
+        const currentStepElement = document.querySelector('.current-step');
+        const elapsedTimeElement = document.querySelector('.elapsed-time');
+
+        if (progressBar) progressBar.style.width = `${progress}%`;
+        if (progressText) progressText.textContent = `${Math.round(progress)}%`;
+        if (currentStepElement) {
+            currentStepElement.textContent = `当前: 执行第${this.automation.currentStep + 1}个命令`;
+        }
+        if (elapsedTimeElement && this.automation.startTime) {
+            const elapsed = Math.floor((Date.now() - this.automation.startTime) / 1000);
+            elapsedTimeElement.textContent = `耗时: ${elapsed}s`;
+        }
+    },
+
+    /**
+     * 更新自动化UI状态
+     */
+    updateAutomationUI: function(state) {
+        const startBtn = document.getElementById('startAutomationBtn');
+        const pauseBtn = document.getElementById('pauseAutomationBtn');
+        const stopBtn = document.getElementById('stopAutomationBtn');
+        const statusPanel = document.getElementById('automationStatus');
+
+        switch (state) {
+            case 'running':
+                startBtn.style.display = 'none';
+                pauseBtn.style.display = 'inline-block';
+                stopBtn.style.display = 'inline-block';
+                statusPanel.style.display = 'block';
+                break;
+            case 'paused':
+                startBtn.style.display = 'inline-block';
+                startBtn.textContent = '继续';
+                startBtn.onclick = () => this.resumeAutomation();
+                pauseBtn.style.display = 'none';
+                stopBtn.style.display = 'inline-block';
+                break;
+            case 'stopped':
+                startBtn.style.display = 'inline-block';
+                startBtn.textContent = '开始执行';
+                startBtn.onclick = () => this.startAutomation();
+                pauseBtn.style.display = 'none';
+                stopBtn.style.display = 'none';
+                statusPanel.style.display = 'none';
+                // 清除高亮
+                document.querySelectorAll('.automation-command-item').forEach(item => {
+                    item.style.border = '1px solid var(--border-color)';
+                    item.style.backgroundColor = 'var(--select-bg)';
+                });
+                break;
         }
     },
 

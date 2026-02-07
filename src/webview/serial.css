@@ -187,7 +187,7 @@ body {
     background-color: var(--btn-disconnect-hover);
 }
 
-/* 主内容区域 */
+/* 主内容区域 - 三栏布局 */
 .main-content {
     display: flex;
     flex: 1;
@@ -196,10 +196,10 @@ body {
     min-height: 0; /* 确保flex容器正确计算高度 */
 }
 
-.left-panel {
+.log-panel {
     display: flex;
     flex-direction: column;
-    width: 70%; /* 占用75%的宽度 */
+    width: 65%; /* 占用40%的宽度 */
     background: var(--panel-background);
     border-radius: 6px;
     box-shadow: 0 2px 8px var(--shadow-color-medium);
@@ -207,18 +207,18 @@ body {
     min-height: 0; /* 确保内容不会溢出 */
 }
 
-.light-theme .left-panel {
+.light-theme .log-panel {
     box-shadow: 0 2px 8px var(--shadow-color-medium);
 }
 
-.left-panel > div:first-child {
+.log-panel > div:first-child {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
 }
 
-.left-panel h3 {
+.log-panel h3 {
     padding: 10px;
     margin: 0;
     border-bottom: 1px solid var(--border-color);
@@ -226,13 +226,13 @@ body {
     font-weight: 600;
 }
 
-.light-theme .left-panel h3 {
+.light-theme .log-panel h3 {
     color: var(--text-color);
     border-bottom: 1px solid var(--border-color);
 }
 
-.right-panel {
-    width: 30%; /* 占用25%的宽度 */
+.at-panel {
+    width: 35%; /* 占用35%的宽度 */
     background: var(--panel-background);
     border-radius: 6px;
     box-shadow: 0 2px 8px var(--shadow-color-medium);
@@ -242,17 +242,133 @@ body {
     min-height: 0;
 }
 
-.light-theme .right-panel {
+.light-theme .at-panel {
     box-shadow: 0 2px 8px var(--shadow-color-medium);
 }
 
-.main-content.monitor-mode .right-panel {
+.automation-panel {
+    width: 25%; /* 占用25%的宽度 */
+    background: var(--panel-background);
+    border-radius: 6px;
+    box-shadow: 0 2px 8px var(--shadow-color-medium);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.light-theme .automation-panel {
+    box-shadow: 0 2px 8px var(--shadow-color-medium);
+}
+
+/* 监控模式下的布局调整 */
+.main-content.monitor-mode .at-panel,
+.main-content.monitor-mode .automation-panel {
     display: none;
 }
 
-.main-content.monitor-mode .left-panel {
+.main-content.monitor-mode .log-panel {
     width: 100%;
-    height: 100%;
+}
+
+/* 自动化模式下的布局调整 */
+.main-content.automation-mode .log-panel {
+    width: 33.33%;
+}
+
+.main-content.automation-mode .at-panel {
+    width: 33.33%;
+}
+
+.main-content.automation-mode .automation-panel {
+    display: flex;
+    width: 33.33%;
+    opacity: 1;
+}
+
+/* 同时处于监控模式和自动化模式 */
+.main-content.monitor-mode.automation-mode .log-panel {
+    width: 100%;
+}
+
+.main-content.monitor-mode.automation-mode .automation-panel {
+    display: none;
+}
+
+/* 自动化模式切换按钮 */
+.automation-mode-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-color);
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+
+.light-theme .automation-mode-toggle {
+    background: transparent;
+}
+
+.automation-mode-toggle:hover {
+    background-color: var(--border-color);
+}
+
+.automation-mode-icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+    .log-panel {
+        width: 50%;
+    }
+    
+    .at-panel {
+        width: 50%;
+    }
+    
+    .automation-panel {
+        width: 0;
+    }
+    
+    .main-content.automation-mode .log-panel,
+    .main-content.automation-mode .at-panel,
+    .main-content.automation-mode .automation-panel {
+        width: 33.33%;
+    }
+}
+
+@media (max-width: 900px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .log-panel,
+    .at-panel,
+    .automation-panel {
+        width: 100%;
+        height: auto;
+    }
+    
+    .main-content.automation-mode .log-panel,
+    .main-content.automation-mode .at-panel,
+    .main-content.automation-mode .automation-panel {
+        width: 100%;
+        height: 33.33%;
+    }
+    
+    .main-content.monitor-mode .log-panel {
+        height: 100%;
+    }
+    
+    .main-content.monitor-mode.automation-mode .log-panel {
+        height: 100%;
+    }
 }
 
 /* AT命令区域 */
@@ -919,4 +1035,331 @@ body {
 .panel-mode-icon {
     width: 16px;
     height: 16px;
+}
+
+/* 自动化执行面板样式 */
+.automation-panel {
+    background: var(--panel-background);
+    border-top: 1px solid var(--border-color);
+    margin-top: 10px;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.automation-header {
+    background-color: var(--panel-background);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.automation-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.automation-track {
+    flex: 1;
+    min-height: 120px;
+    padding: 10px;
+    background-color: var(--background-color);
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+    transition: background-color 0.2s;
+    overflow-y: auto; /* 添加垂直滚动 */
+    max-height: 200px; /* 设置最大高度 */
+}
+
+.automation-track::-webkit-scrollbar {
+    width: 8px;
+}
+
+.automation-track::-webkit-scrollbar-track {
+    background: var(--panel-background);
+    border-radius: 4px;
+}
+
+.automation-track::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.automation-track::-webkit-scrollbar-thumb:hover {
+    background: var(--text-light);
+}
+
+.automation-track.drag-over {
+    background-color: var(--select-bg);
+    border: 2px dashed var(--primary-color);
+}
+
+.track-placeholder {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--text-light);
+    font-size: 13px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.automation-track:not(:empty) .track-placeholder {
+    display: none;
+}
+
+/* 自动化命令项样式 */
+.automation-command-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    margin-bottom: 5px;
+    background-color: var(--select-bg);
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    cursor: move;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.automation-command-item:hover {
+    background-color: var(--at-command-item-hover);
+    transform: translateX(2px);
+}
+
+.automation-command-item.dragging {
+    opacity: 0.5;
+    transform: rotate(5deg);
+}
+
+.command-drag-handle {
+    margin-right: 8px;
+    cursor: move;
+    color: var(--text-light);
+    flex-shrink: 0;
+}
+
+.command-content {
+    flex: 1;
+    font-family: 'monospace', Monaco, Consolas;
+    font-size: 13px;
+    color: var(--text-color);
+    word-break: break-all;
+}
+
+.command-settings {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 10px;
+    flex-shrink: 0;
+}
+
+.setting-input {
+    width: 60px;
+    padding: 2px 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background-color: var(--panel-background);
+    color: var(--text-color);
+    font-size: 12px;
+}
+
+.remove-command-btn {
+    background: transparent;
+    border: none;
+    color: var(--danger-color);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+.remove-command-btn:hover {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+/* 自动化控制区域样式 */
+.automation-controls {
+    padding: 10px;
+    background-color: var(--panel-background);
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0; /* 防止控制区域被压缩 */
+}
+
+.control-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.btn-start-auto, .btn-pause-auto, .btn-stop-auto {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s;
+    flex: 1;
+}
+
+.btn-start-auto {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.btn-start-auto:hover {
+    background-color: #5daf34;
+}
+
+.btn-pause-auto {
+    background-color: var(--warning-color);
+    color: white;
+}
+
+.btn-pause-auto:hover {
+    background-color: #cf9236;
+}
+
+.btn-stop-auto {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-stop-auto:hover {
+    background-color: #dd6161;
+}
+
+.settings-row {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.settings-row label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: var(--text-color);
+}
+
+.settings-row input {
+    padding: 4px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background-color: var(--select-bg);
+    color: var(--text-color);
+    font-size: 12px;
+    width: 60px;
+}
+
+.help-text {
+    font-size: 11px;
+    color: var(--text-light);
+}
+
+/* 自动化状态显示样式 */
+.automation-status {
+    padding: 10px;
+    background-color: var(--panel-background);
+    border-top: 1px solid var(--border-color);
+}
+
+.status-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 6px;
+    background-color: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: var(--primary-color);
+    transition: width 0.3s;
+    border-radius: 3px;
+}
+
+.progress-text {
+    font-size: 12px;
+    color: var(--text-color);
+    min-width: 35px;
+    text-align: right;
+}
+
+.status-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+.current-step {
+    color: var(--primary-color);
+}
+
+.elapsed-time {
+    color: var(--text-color);
+}
+
+/* 浅色主题适配 */
+.light-theme .automation-panel {
+    background: var(--panel-background);
+}
+
+.light-theme .automation-track {
+    background-color: var(--background-color);
+}
+
+.light-theme .automation-command-item {
+    background-color: var(--select-bg);
+    border-color: var(--border-color);
+}
+
+.light-theme .automation-command-item:hover {
+    background-color: var(--at-command-item-hover);
+}
+
+.light-theme .setting-input {
+    background-color: var(--panel-background);
+    border-color: var(--border-color);
+    color: var(--text-color);
+}
+
+.light-theme .settings-row input {
+    background-color: var(--select-bg);
+    border-color: var(--border-color);
+    color: var(--text-color);
+}
+
+/* 响应式设计 */
+@media (max-width: 600px) {
+    .settings-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .control-row {
+        flex-direction: column;
+    }
+    
+    .automation-command-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .command-settings {
+        width: 100%;
+        justify-content: space-between;
+    }
 }
