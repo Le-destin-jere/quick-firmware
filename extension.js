@@ -334,7 +334,6 @@ function loadAtCommandsFromIni(configName = null, targetPanel = null) {
 function updateAtCommand(oldCommand, newCommand, configName = null, commandIndex = -1, panelIndex = null) {
 
     let iniPath;
-    // 检查是否是外部文件配置
     if (configName && configName.startsWith('file:')) {
         iniPath = configName.substring(5); // 移除 'file:' 前缀
     } 

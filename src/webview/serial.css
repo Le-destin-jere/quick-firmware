@@ -155,6 +155,7 @@ body {
 
 .btn-connect {
     background-color: var(--primary-color);
+    opacity: 0.9;
 }
 
 .light-theme .btn-connect {
@@ -171,6 +172,7 @@ body {
 
 .btn-disconnect {
     background-color: var(--danger-color);
+    opacity: 0.9;
 }
 
 .light-theme .btn-disconnect {
@@ -345,7 +347,8 @@ body {
     font-size: 13px;
     white-space: nowrap;
     transition: all 0.2s ease;
-    background-color: transparent;
+    background-color: var(--btn-small-bg);
+    opacity: 0.6;
     border: none;
     color: var(--text-color);
     min-width: 50px;
@@ -355,20 +358,24 @@ body {
 }
 
 .at-config-tab:hover {
-    background-color: var(--select-bg);
+    background-color: var(--btn-small-hover);
 }
 
 .at-config-tab.active {
     background-color: var(--primary-color);
+    /*background: linear-gradient(90deg, var(--danger-color) 0%, var(--primary-color) 100%);*/
     color: white;
+    opacity: 0.9;
 }
 
 .light-theme .at-config-tab {
     color: var(--text-color);
+    background-color: var(--btn-small-bg);
+    opacity: 0.9;
 }
 
 .light-theme .at-config-tab:hover {
-    background-color: #e6e6e6;
+    background-color: var(--btn-small-hover);
 }
 
 .light-theme .at-config-tab.active {
@@ -533,10 +540,6 @@ body {
     padding: 5px;
     line-height: 1.2;
     outline: none;
-    /* 添加以下属性使容器可编辑 */
-    -webkit-user-modify: read-write-plaintext-only;
-    -moz-user-modify: read-write-plaintext-only;
-    -ms-user-modify: read-write-plaintext-only;
 }
 
 /* 非监控模式下确保不可编辑 */
@@ -671,6 +674,7 @@ body {
 #sendBtn {
     padding: 10px 20px;
     background-color: var(--primary-color);
+    opacity: 0.9;
     color: white;
     border: none;
     border-radius: 4px;
@@ -702,6 +706,13 @@ body {
 }
 
 .btn-small:hover {
+    background-color: var(--btn-small-hover);
+}
+
+.light-theme .btn-small {
+    background-color: var(--btn-small-bg);
+}
+.light-theme .btn-small:hover {
     background-color: var(--btn-small-hover);
 }
 
@@ -854,6 +865,9 @@ body {
     border-radius: 4px;
     transition: background-color 0.3s;
 }
+.light-theme .theme-toggle-btn {
+    background: transparent;
+}
 
 .theme-toggle-btn:hover {
     background-color: var(--border-color);
@@ -892,6 +906,10 @@ body {
     color: var(--text-color);
     border-radius: 4px;
     transition: background-color 0.3s;
+}
+
+.light-theme .panel-mode-toggle-btn {
+    background: transparent;
 }
 
 .panel-mode-toggle-btn:hover {
