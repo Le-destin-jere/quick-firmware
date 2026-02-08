@@ -38,11 +38,8 @@
                 </button>
                 <button id="automationModeToggleBtn" class="btn-small automation-mode-toggle" title="自动化模式">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="automation-mode-icon">
-                        <path d="M12 4c-2.2 0-4 1.8-4 4s1.8 4 4 4 4-1.8 4-4-1.8-4-4-4z"></path>
-                        <path d="M6 14h12c1.1 0 2 .9 2 2v2c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2v-2c0-1.1.9-2 2-2z"></path>
-                        <circle cx="8" cy="8" r="1"></circle>
-                        <circle cx="16" cy="8" r="1"></circle>
-                        <path d="M12 16v-2"></path>
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
                     </svg>
                 </button>
                 <button id="themeToggleBtn" class="btn-small theme-toggle-btn" title="切换主题">
@@ -82,8 +79,20 @@
                 
                 <!-- 操作按钮区域 -->
                 <div class="log-actions" style="margin-top: 10px;">
-                    <button id="clearLogBtn" class="btn-small">清空</button>
-                    <button id="saveLogBtn" class="btn-small">保存</button>
+                    <button id="clearLogBtn" class="btn-icon" title="清空日志">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                    </button>
+                    <button id="saveLogBtn" class="btn-icon" title="保存日志">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                    </button>
 
                     <div class="dtr-cts-controls">
                         <label for="dtrCheckbox">
@@ -108,40 +117,20 @@
                 </div>
             </div>
             
-            <!-- 中间AT命令区域 -->
-            <div class="at-panel">
-                <div class="at-commands-container">
-                    <div class="at-header">
-                        <div class="title-and-button-container">
-                            <h3>命令集</h3>
-                            <button id="addAtCommandTab" class="btn-add-tab" title="添加标签页">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                                </svg>
-                            </button>
-                        </div>
-                        <div id="atConfigTabs" class="at-config-tabs">
-                        </div>
-                    </div>
-                    <div id="atCommandsList"></div>
-                </div>
-            </div>
-            
-            <!-- 右侧自动化执行区域 -->
+            <!-- 自动化执行区域 -->
             <div class="automation-panel">
                 <div class="automation-header">
                     <div class="title-and-button-container">
                         <h3>自动化</h3>
                         <div class="automation-buttons">
-                            <button id="importCommandsBtn" class="btn-small" title="从AT列表导入命令">
+                            <button id="importCommandsBtn" class="btn-at-header" title="导入全部">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                     <polyline points="7 10 12 15 17 10"></polyline>
                                     <line x1="12" y1="15" x2="12" y2="3"></line>
                                 </svg>
                             </button>
-                            <button id="clearAutomationBtn" class="btn-small" title="清空自动化序列">
+                            <button id="clearAutomationBtn" class="btn-at-header" title="清空序列">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="3 6 5 6 21 6"></polyline>
                                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -152,30 +141,43 @@
                         </div>
                     </div>
                 </div>
-                
                 <!-- 自动化命令序列轨道 -->
                 <div id="automationTrack" class="automation-track">
-                    <div class="track-placeholder">拖拽AT命令到这里创建自动化序列</div>
+                    <div class="track-placeholder">命令自动化序列</div>
                 </div>
                 
                 <!-- 执行控制区域 -->
                 <div class="automation-controls">
-                    <div class="control-row">
-                        <button id="startAutomationBtn" class="btn-start-auto">开始执行</button>
-                        <button id="pauseAutomationBtn" class="btn-pause-auto" style="display:none;">暂停</button>
-                        <button id="stopAutomationBtn" class="btn-stop-auto" style="display:none;">停止</button>
-                    </div>
-                    
-                    <div class="settings-row">
-                        <label>
-                            循环次数:
-                            <input type="number" id="loopCountInput" value="1" min="-1" max="9999">
-                            <span class="help-text">(-1为无限循环)</span>
-                        </label>
-                        <label>
-                            命令间隔(ms):
-                            <input type="number" id="commandIntervalInput" value="1000" min="0" max="60000">
-                        </label>
+                    <div class="settings-control-row">
+                        <div class="settings-row">
+                            <label>
+                                循环次数:
+                                <input type="number" id="loopCountInput" value="1" min="-1" max="9999">
+                            </label>
+                            <label>
+                                间隔(ms):
+                                <input type="number" id="commandIntervalInput" value="1000" min="0" max="60000" step="100">
+                            </label>
+                        </div>
+                        <div class="control-row">
+                            <button id="toggleAutomationBtn" class="btn-icon btn-start-auto" title="开始/停止">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-play">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-stop" style="display: none;">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                </svg>
+                            </button>
+                            <button id="pauseResumeBtn" class="btn-icon btn-pause-auto" title="暂停/继续">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-pause">
+                                    <rect x="6" y="4" width="4" height="16"></rect>
+                                    <rect x="14" y="4" width="4" height="16"></rect>
+                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-resume" style="display: none;">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 
@@ -193,6 +195,27 @@
                     </div>
                 </div>
             </div>
+
+            <!-- AT命令区域 -->
+            <div class="at-panel">
+                <div class="at-commands-container">
+                    <div class="at-header">
+                        <div class="title-and-button-container">
+                            <h3>命令集</h3>
+                            <button id="addAtCommandTab" class="btn-at-header" title="添加标签页">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="atConfigTabs" class="at-config-tabs">
+                        </div>
+                    </div>
+                    <div id="atCommandsList"></div>
+                </div>
+            </div>
+            
         </div>
     </div>
     

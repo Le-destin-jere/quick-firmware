@@ -55,16 +55,12 @@ const SerialDebug = {
         
         // 当portSelector获得焦点时刷新端口列表，避免点击选项时触发刷新
         document.getElementById('portSelector').addEventListener('focus', () => this.requestPorts());
-        
         // 添加主题切换按钮事件监听
         document.getElementById('themeToggleBtn').addEventListener('click', () => this.toggleTheme());
-        
         // 添加面板模式切换按钮事件监听
         document.getElementById('panelModeToggleBtn').addEventListener('click', () => this.togglePanelMode());
-        
         // 添加自动化模式切换按钮事件监听
         document.getElementById('automationModeToggleBtn').addEventListener('click', () => this.toggleAutomationMode());
-        
         // 添加DTR和CTS事件监听
         document.getElementById('dtrCheckbox').addEventListener('change', (e) => {
             if (this.isOpen && vscode) {
@@ -74,7 +70,6 @@ const SerialDebug = {
                 });
             }
         });
-        
         document.getElementById('ctsCheckbox').addEventListener('change', (e) => {
             if (this.isOpen && vscode) {
                 vscode.postMessage({
@@ -111,8 +106,16 @@ const SerialDebug = {
                 (e.target.tagName === 'svg' || e.target.closest('.send-at-cmd-icon'))) {
                 const button = e.target.closest('.send-at-cmd-icon');
                 const command = button.dataset.command;
-                document.getElementById('sendText').value = command;
-                this.sendData();
+                
+                // 检查是否处于自动化模式
+                if (this.isAutomationMode) {
+                    // 在自动化模式下，将命令添加到自动化轨道
+                    this.addCommandToAutomationTrack(command);
+                } else {
+                    // 在非自动化模式下，继续原有功能：发送到串口
+                    document.getElementById('sendText').value = command;
+                    this.sendData();
+                }
             } else if (e.target.tagName === 'SPAN' && e.target.parentElement.classList.contains('at-command-item')) {
                 // 点击AT命令文本进入编辑模式 - 现在也支持内容为空的情况
                 this.editAtCommand(e.target);
@@ -125,6 +128,13 @@ const SerialDebug = {
                 this.saveAtCommand(e.target);
             }
         });
+        
+        // 为AT命令输入框添加失去焦点事件，当用户点击其他地方时保存更改
+        document.getElementById('atCommandsList').addEventListener('blur', (e) => {
+            if (e.target.tagName === 'INPUT') {
+                this.saveAtCommand(e.target);
+            }
+        }, true); // 使用捕获阶段确保能够正确监听到事件
         
         // 添加自动化相关的事件监听
         this.setupAutomationEventListeners();
@@ -335,8 +345,7 @@ const SerialDebug = {
         const logEntry = document.createElement('div');
         logEntry.className = `log-entry ${level}`;
         logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="log-level ${level}">${message}</span>`;
-        document.getElementById('serialLog').appendChild(logEntry);
-        
+        document.getElementById('serialLog').appendChild(logEntry); 
         // 自动滚动到底部
         const logContainer = document.getElementById('serialLog');
         logContainer.scrollTop = logContainer.scrollHeight;
@@ -651,20 +660,23 @@ const SerialDebug = {
             this.clearAutomationSequence();
         });
 
-        // 开始执行按钮
-        document.getElementById('startAutomationBtn').addEventListener('click', () => {
-            this.startAutomation();
+        document.getElementById('toggleAutomationBtn').addEventListener('click', () => {
+            if (this.automation.isRunning) {
+                this.stopAutomation();
+            } else {
+                this.startAutomation();
+            }
         });
 
-        // 暂停执行按钮
-        document.getElementById('pauseAutomationBtn').addEventListener('click', () => {
-            this.pauseAutomation();
+        document.getElementById('pauseResumeBtn').addEventListener('click', () => {
+            if (this.automation.isPaused) {
+                this.resumeAutomation();
+            } else { 
+                this.pauseAutomation();
+            }
         });
 
-        // 停止执行按钮
-        document.getElementById('stopAutomationBtn').addEventListener('click', () => {
-            this.stopAutomation();
-        });
+
 
         // 设置拖拽功能
         this.setupDragAndDrop();
@@ -684,9 +696,7 @@ const SerialDebug = {
                 selectedCommands.push({
                     id: 'cmd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                     command: commandText,
-                    delay: 1000,
-                    timeout: 5000,
-                    expectedResponse: null
+                    delay: 1000
                 });
             }
         });
@@ -708,12 +718,10 @@ const SerialDebug = {
      */
     clearAutomationSequence: function() {
         if (this.automation.commands.length > 0) {
-            if (confirm('确定要清空自动化序列吗？')) {
-                this.automation.commands = [];
-                this.renderAutomationTrack();
-                this.saveAutomationSequence();
-                this.addLog('自动化序列已清空', 'info');
-            }
+            this.automation.commands = [];
+            this.renderAutomationTrack();
+            this.saveAutomationSequence();
+            this.addLog('自动化序列已清空', 'info');
         } else {
             this.addLog('自动化序列已经是空的', 'info');
         }
@@ -761,13 +769,8 @@ const SerialDebug = {
             <div class="command-content">${this.escapeHtml(command.command)}</div>
             <div class="command-settings">
                 <label>
-                    延迟:
-                    <input type="number" class="setting-input delay-input" value="${command.delay}" min="0" max="60000" data-field="delay">
-                    ms
-                </label>
-                <label>
-                    超时:
-                    <input type="number" class="setting-input timeout-input" value="${command.timeout}" min="100" max="30000" data-field="timeout">
+                    Delay:
+                    <input type="number" class="setting-input delay-input" value="${command.delay}" min="0" max="60000" step="10" data-field="delay">
                     ms
                 </label>
                 <button class="remove-command-btn" title="移除命令">
@@ -791,15 +794,9 @@ const SerialDebug = {
     attachCommandElementEvents: function(element, command) {
         // 设置输入框事件
         const delayInput = element.querySelector('.delay-input');
-        const timeoutInput = element.querySelector('.timeout-input');
         
         delayInput.addEventListener('change', (e) => {
             command.delay = parseInt(e.target.value) || 1000;
-            this.saveAutomationSequence();
-        });
-        
-        timeoutInput.addEventListener('change', (e) => {
-            command.timeout = parseInt(e.target.value) || 5000;
             this.saveAutomationSequence();
         });
 
@@ -833,23 +830,94 @@ const SerialDebug = {
             if (e.target.classList.contains('automation-command-item')) {
                 e.target.classList.add('dragging');
                 e.dataTransfer.setData('text/plain', e.target.dataset.commandId);
+                
+                // 添加拖拽阴影效果
+                e.dataTransfer.effectAllowed = 'move';
             }
         });
 
         track.addEventListener('dragend', (e) => {
             if (e.target.classList.contains('automation-command-item')) {
                 e.target.classList.remove('dragging');
+                
+                // 移除所有可能的放置指示器
+                const dropIndicators = track.querySelectorAll('.drop-indicator');
+                dropIndicators.forEach(indicator => indicator.remove());
             }
         });
 
         track.addEventListener('dragover', (e) => {
             e.preventDefault();
             track.classList.add('drag-over');
+            
+            // 查找最近的命令项
+            const closestElement = e.target.closest('.automation-command-item');
+            const commandItems = Array.from(track.querySelectorAll('.automation-command-item'));
+            
+            // 移除所有现有的放置指示器
+            const existingIndicators = track.querySelectorAll('.drop-indicator');
+            existingIndicators.forEach(indicator => indicator.remove());
+            
+            // 移除所有高亮样式
+            const highlightedItems = track.querySelectorAll('.drop-target-before, .drop-target-after');
+            highlightedItems.forEach(item => {
+                item.classList.remove('drop-target-before', 'drop-target-after');
+            });
+            
+            // 计算鼠标在容器中的相对位置
+            const rect = track.getBoundingClientRect();
+            const mouseY = e.clientY;
+            
+            // 为每个命令项添加放置指示器
+            for (let i = 0; i < commandItems.length; i++) {
+                const item = commandItems[i];
+                
+                // 跳过正在被拖拽的元素
+                if (item.dataset.commandId === e.target.closest('.automation-command-item')?.dataset.commandId) {
+                    continue;
+                }
+                
+                const itemRect = item.getBoundingClientRect();
+                
+                // 如果鼠标在元素上方的前半部分，则在该项前面显示指示器
+                if (mouseY < itemRect.top + itemRect.height / 2) {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'drop-indicator';
+                    track.insertBefore(indicator, item);
+                    
+                    // 高亮显示目标位置
+                    item.classList.add('drop-target-before');
+                    
+                    // 只在当前位置添加一个指示器
+                    break;
+                } 
+                // 如果鼠标在最后一项且在元素下半部分，则在该项后面显示指示器
+                else if (i === commandItems.length - 1 && mouseY > itemRect.top + itemRect.height / 2) {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'drop-indicator';
+                    track.appendChild(indicator);
+                    
+                    // 高亮显示目标位置
+                    item.classList.add('drop-target-after');
+                    
+                    break;
+                }
+            }
         });
 
         track.addEventListener('dragleave', (e) => {
             if (!track.contains(e.relatedTarget)) {
                 track.classList.remove('drag-over');
+                
+                // 移除放置指示器
+                const dropIndicators = track.querySelectorAll('.drop-indicator');
+                dropIndicators.forEach(indicator => indicator.remove());
+                
+                // 移除高亮样式
+                const highlightedItems = track.querySelectorAll('.drop-target-before, .drop-target-after');
+                highlightedItems.forEach(item => {
+                    item.classList.remove('drop-target-before', 'drop-target-after');
+                });
             }
         });
 
@@ -858,12 +926,64 @@ const SerialDebug = {
             track.classList.remove('drag-over');
             
             const commandId = e.dataTransfer.getData('text/plain');
-            const targetElement = e.target.closest('.automation-command-item');
             
-            if (commandId && targetElement) {
-                this.reorderAutomationCommands(commandId, targetElement.dataset.commandId);
+            // 查找带有高亮样式的元素来确定放置位置
+            const beforeTarget = track.querySelector('.drop-target-before');
+            const afterTarget = track.querySelector('.drop-target-after');
+            
+            if (commandId) {
+                if (beforeTarget && beforeTarget.dataset.commandId !== commandId) {
+                    // 放置在该元素之前
+                    this.reorderAutomationCommands(commandId, beforeTarget.dataset.commandId);
+                } else if (afterTarget && afterTarget.dataset.commandId !== commandId) {
+                    // 放置在该元素之后
+                    this.moveCommandAfter(commandId, afterTarget.dataset.commandId);
+                } else if (!beforeTarget && !afterTarget) {
+                    // 如果没有高亮元素，可能是放置在末尾
+                    const lastCommandItem = track.querySelector('.automation-command-item:last-child');
+                    if (lastCommandItem && lastCommandItem.dataset.commandId !== commandId) {
+                        this.moveCommandAfter(commandId, lastCommandItem.dataset.commandId);
+                    }
+                }
             }
+            
+            // 移除所有放置指示器
+            const dropIndicators = track.querySelectorAll('.drop-indicator');
+            dropIndicators.forEach(indicator => indicator.remove());
+            
+            // 移除高亮样式
+            const highlightedItems = track.querySelectorAll('.drop-target-before, .drop-target-after');
+            highlightedItems.forEach(item => {
+                item.classList.remove('drop-target-before', 'drop-target-after');
+            });
         });
+    },
+
+    /**
+     * 将命令移动到指定命令之后
+     */
+    moveCommandAfter: function(sourceId, targetId) {
+        const sourceIndex = this.automation.commands.findIndex(cmd => cmd.id === sourceId);
+        const targetIndex = this.automation.commands.findIndex(cmd => cmd.id === targetId);
+        
+        if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+            return; // 源命令或目标命令不存在，或为同一命令
+        }
+        
+        // 提取要移动的命令
+        const [movedCommand] = this.automation.commands.splice(sourceIndex, 1);
+        
+        // 计算插入位置：插入到目标索引之后
+        // 如果原始位置在目标位置之前，因为移除了元素，所以目标索引需要减1
+        const adjustedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+        const insertIndex = adjustedTargetIndex + 1; // +1 表示插入到目标元素之后
+        
+        // 插入到正确位置
+        this.automation.commands.splice(insertIndex, 0, movedCommand);
+        
+        this.renderAutomationTrack();
+        this.saveAutomationSequence();
+        this.addLog('命令顺序已调整', 'info');
     },
 
     /**
@@ -871,15 +991,35 @@ const SerialDebug = {
      */
     reorderAutomationCommands: function(sourceId, targetId) {
         const sourceIndex = this.automation.commands.findIndex(cmd => cmd.id === sourceId);
+        
+        if (sourceIndex === -1) {
+            return; // 源命令不存在
+        }
+        
+        if (!targetId) {
+            // 如果没有目标ID，则无需移动
+            return;
+        }
+        
         const targetIndex = this.automation.commands.findIndex(cmd => cmd.id === targetId);
         
-        if (sourceIndex !== -1 && targetIndex !== -1 && sourceIndex !== targetIndex) {
-            const [movedCommand] = this.automation.commands.splice(sourceIndex, 1);
-            this.automation.commands.splice(targetIndex, 0, movedCommand);
-            this.renderAutomationTrack();
-            this.saveAutomationSequence();
-            this.addLog('命令顺序已调整', 'info');
+        if (targetIndex === -1 || sourceIndex === targetIndex) {
+            return; // 目标命令不存在或相同位置
         }
+        
+        // 提取要移动的命令
+        const [movedCommand] = this.automation.commands.splice(sourceIndex, 1);
+        
+        // 重新计算插入位置
+        // 如果原始位置在目标位置之前，因为移除了元素，所以目标索引需要减1
+        let insertIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+        
+        // 插入到正确位置
+        this.automation.commands.splice(insertIndex, 0, movedCommand);
+        
+        this.renderAutomationTrack();
+        this.saveAutomationSequence();
+        this.addLog('命令顺序已调整', 'info');
     },
 
     /**
@@ -918,10 +1058,10 @@ const SerialDebug = {
         // 更新UI
         this.updateAutomationUI('running');
 
+        this.addLog(`自动化执行开始，共${loopCount === -1 ? '无限' : loopCount}次循环`, 'success');
         // 开始执行
         this.executeNextCommand();
         
-        this.addLog(`自动化执行开始，共${loopCount === -1 ? '无限' : loopCount}次循环`, 'success');
     },
 
     /**
@@ -975,8 +1115,9 @@ const SerialDebug = {
 
         // 检查是否完成当前循环
         if (this.automation.currentStep >= this.automation.commands.length) {
-            this.automation.loopCount++;
+            // 重置当前步骤，准备下一次循环
             this.automation.currentStep = 0;
+            this.automation.loopCount++;
             
             if (this.automation.totalLoops !== -1) {
                 this.addLog(`第${this.automation.loopCount}次循环完成`, 'info');
@@ -999,9 +1140,8 @@ const SerialDebug = {
         const command = this.automation.commands[this.automation.currentStep];
         this.highlightCurrentCommand(this.automation.currentStep);
         this.updateProgress();
-        
-        this.addLog(`执行: ${command.command}`, 'info');
-        
+        //this.addLog(`执行: ${command.command}`, 'info');
+        this.addSentData(`${command.command}`);
         // 发送命令
         if (vscode) {
             vscode.postMessage({
@@ -1011,21 +1151,13 @@ const SerialDebug = {
             });
         }
 
-        // 设置超时检查
+        // 延迟执行下一个命令，确保命令按顺序执行
         this.automation.timer = setTimeout(() => {
-            this.addLog(`命令超时: ${command.command}`, 'error');
-            this.automation.currentStep++;
-            this.executeNextCommand();
-        }, command.timeout);
-
-        // 延迟执行下一个命令
-        setTimeout(() => {
-            if (this.automation.timer) {
-                clearTimeout(this.automation.timer);
-                this.automation.timer = null;
+            // 确保只有在没有暂停的情况下才执行下一步
+            if (!this.automation.isPaused && this.automation.isRunning) {
+                this.automation.currentStep++;
+                this.executeNextCommand();
             }
-            this.automation.currentStep++;
-            this.executeNextCommand();
         }, command.delay);
     },
 
@@ -1077,39 +1209,67 @@ const SerialDebug = {
      * 更新自动化UI状态
      */
     updateAutomationUI: function(state) {
-        const startBtn = document.getElementById('startAutomationBtn');
-        const pauseBtn = document.getElementById('pauseAutomationBtn');
-        const stopBtn = document.getElementById('stopAutomationBtn');
-        const statusPanel = document.getElementById('automationStatus');
+        const toggleBtn = document.getElementById('toggleAutomationBtn');
+        const pauseBtn = document.getElementById('pauseResumeBtn');
+        
+        // 隐藏所有图标
+        const togglePlayIcon = toggleBtn.querySelector('.icon-play');
+        const toggleStopIcon = toggleBtn.querySelector('.icon-stop');
+        const pausePauseIcon = pauseBtn.querySelector('.icon-pause');
+        const pauseResumeIcon = pauseBtn.querySelector('.icon-resume');
 
-        switch (state) {
-            case 'running':
-                startBtn.style.display = 'none';
-                pauseBtn.style.display = 'inline-block';
-                stopBtn.style.display = 'inline-block';
-                statusPanel.style.display = 'block';
-                break;
-            case 'paused':
-                startBtn.style.display = 'inline-block';
-                startBtn.textContent = '继续';
-                startBtn.onclick = () => this.resumeAutomation();
-                pauseBtn.style.display = 'none';
-                stopBtn.style.display = 'inline-block';
-                break;
-            case 'stopped':
-                startBtn.style.display = 'inline-block';
-                startBtn.textContent = '开始执行';
-                startBtn.onclick = () => this.startAutomation();
-                pauseBtn.style.display = 'none';
-                stopBtn.style.display = 'none';
-                statusPanel.style.display = 'none';
-                // 清除高亮
-                document.querySelectorAll('.automation-command-item').forEach(item => {
-                    item.style.border = '1px solid var(--border-color)';
-                    item.style.backgroundColor = 'var(--select-bg)';
-                });
-                break;
+        if (state === 'running') {
+            // 切换按钮显示停止图标
+            togglePlayIcon.style.display = 'none';
+            toggleStopIcon.style.display = 'block';
+            toggleBtn.title = '停止';
+            
+            // 暂停按钮显示暂停图标
+            pausePauseIcon.style.display = 'block';
+            pauseResumeIcon.style.display = 'none';
+            pauseBtn.title = '暂停';
+            
+            pauseBtn.disabled = false;
+        } else if (state === 'paused') {
+            // 切换按钮保持停止图标
+            togglePlayIcon.style.display = 'none';
+            toggleStopIcon.style.display = 'block';
+            toggleBtn.title = '停止';
+            
+            // 暂停按钮显示继续图标
+            pausePauseIcon.style.display = 'none';
+            pauseResumeIcon.style.display = 'block';
+            pauseBtn.title = '继续';
+        } else { // stopped
+            // 切换按钮显示播放图标
+            togglePlayIcon.style.display = 'block';
+            toggleStopIcon.style.display = 'none';
+            toggleBtn.title = '开始';
+            
+            // 暂停按钮显示暂停图标（但禁用）
+            pausePauseIcon.style.display = 'block';
+            pauseResumeIcon.style.display = 'none';
+            pauseBtn.title = '暂停';
+            pauseBtn.disabled = true;
         }
+    },
+
+    /**
+     * 将AT命令添加到自动化轨道
+     */
+    addCommandToAutomationTrack: function(commandText) {
+        // 创建命令对象
+        const commandObj = {
+            id: 'cmd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            command: commandText,
+            delay: 1000      // 默认延迟1秒
+        };
+
+        // 添加到自动化序列
+        this.automation.commands.push(commandObj);
+        this.renderAutomationTrack();
+        this.saveAutomationSequence();
+        this.addLog(`已添加 "${commandText}" 到序列`, 'success');
     },
 
 };
