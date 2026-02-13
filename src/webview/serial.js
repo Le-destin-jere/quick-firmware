@@ -9,11 +9,8 @@ const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : nul
 
 const SerialDebug = {
     isOpen: false,
-    currentTheme: 'dark', // 默认主题
+    currentTheme: 'dark',    // 默认主题
     isAutomationMode: false, // 自动化模式状态
-    
-    // AT命令历史，存储在全局状态中
-    atCommands: [],
     
     // 自动化执行相关属性
     automation: {
@@ -36,13 +33,10 @@ const SerialDebug = {
             });
         }
 
-        this.loadAtCommands();
-
         this.setupEventListeners();
         
         this.requestPorts();
         
-        // 初始化自动化功能
         this.initAutomation();
     },
     
@@ -52,16 +46,10 @@ const SerialDebug = {
         document.getElementById('sendBtn').addEventListener('click', () => this.sendData());
         document.getElementById('clearLogBtn').addEventListener('click', () => this.clearLog());
         document.getElementById('saveLogBtn').addEventListener('click', () => this.saveLog());
-        
-        // 当portSelector获得焦点时刷新端口列表，避免点击选项时触发刷新
         document.getElementById('portSelector').addEventListener('focus', () => this.requestPorts());
-        // 添加主题切换按钮事件监听
         document.getElementById('themeToggleBtn').addEventListener('click', () => this.toggleTheme());
-        // 添加面板模式切换按钮事件监听
         document.getElementById('panelModeToggleBtn').addEventListener('click', () => this.togglePanelMode());
-        // 添加自动化模式切换按钮事件监听
         document.getElementById('automationModeToggleBtn').addEventListener('click', () => this.toggleAutomationMode());
-        // 添加DTR和CTS事件监听
         document.getElementById('dtrCheckbox').addEventListener('change', (e) => {
             if (this.isOpen && vscode) {
                 vscode.postMessage({
@@ -70,7 +58,7 @@ const SerialDebug = {
                 });
             }
         });
-        document.getElementById('ctsCheckbox').addEventListener('change', (e) => {
+        document.getElementById('rtsCheckbox').addEventListener('change', (e) => {
             if (this.isOpen && vscode) {
                 vscode.postMessage({
                     command: 'setRTS',
@@ -83,7 +71,6 @@ const SerialDebug = {
         const tabsContainer = document.getElementById('atConfigTabs');
         tabsContainer.addEventListener('wheel', (e) => {
             e.preventDefault(); // 阻止默认滚动行为
-            // 根据滚轮移动方向水平滚动
             tabsContainer.scrollLeft += e.deltaY;
         });
 
@@ -100,26 +87,24 @@ const SerialDebug = {
             }
         });
         
-        // AT命令历史点击发送
+        // AT命点击发送
         document.getElementById('atCommandsList').addEventListener('click', (e) => {
-            if (e.target.classList.contains('send-at-cmd-icon') || 
-                (e.target.tagName === 'svg' || e.target.closest('.send-at-cmd-icon'))) {
+            if (e.target.classList.contains('send-at-cmd-icon') || ( e.target.closest('.send-at-cmd-icon'))) {
                 const button = e.target.closest('.send-at-cmd-icon');
                 const command = button.dataset.command;
-                
-                // 检查是否处于自动化模式
-                if (this.isAutomationMode) {
-                    // 在自动化模式下，将命令添加到自动化轨道
-                    this.addCommandToAutomationTrack(command);
-                } else {
-                    // 在非自动化模式下，继续原有功能：发送到串口
-                    document.getElementById('sendText').value = command;
-                    this.sendData();
-                }
-            } else if (e.target.tagName === 'SPAN' && e.target.parentElement.classList.contains('at-command-item')) {
-                // 点击AT命令文本进入编辑模式 - 现在也支持内容为空的情况
+                document.getElementById('sendText').value = command;
+                this.sendData();
+            } else if (e.target.tagName === 'SPAN' 
+                && e.target.parentElement.classList.contains('at-command-item')) {
                 this.editAtCommand(e.target);
+            } else  if (e.target.classList.contains('add-at-cmd-icon') || ( e.target.closest('.add-at-cmd-icon'))) {
+                const button = e.target.closest('.add-at-cmd-icon');
+                const command = button.dataset.command;
+                if (this.isAutomationMode) {
+                    this.addCommandToAutomationTrack(command);
+                }
             }
+
         });
         
         // 为AT命令输入框添加回车和失去焦点事件
@@ -147,7 +132,7 @@ const SerialDebug = {
         // 向后端发送消息请求创建新的AT命令配置
         if (vscode) {
             vscode.postMessage({
-                command: 'createNewAtConfig'
+                command: 'addNewAtConfig'
             });
         }
     },
@@ -227,7 +212,7 @@ const SerialDebug = {
             
             // 获取DTR和RTS的初始状态并发送设置
             const dtrState = document.getElementById('dtrCheckbox').checked;
-            const rtsState = document.getElementById('ctsCheckbox').checked;
+            const rtsState = document.getElementById('rtsCheckbox').checked;
             
             // 发送DTR状态设置
             if (vscode) {
@@ -289,18 +274,40 @@ const SerialDebug = {
         }
         
         try {
-            // 获取发送模式（文本或十六进制）- 修改：从checkbox获取
+            // 获取发送模式
             const isHexMode = document.getElementById('hexModeCheckbox').checked;
-            // 通知VSCode后端发送数据
-            if (vscode) {
-                vscode.postMessage({
-                    command: 'sendData',
-                    data: sendText,
-                    isHex: isHexMode
-                });
+            const isCRLFMode = document.getElementById('crlfModeCheckbox').checked;
+            if (vscode) { // 通知VSCode后端发送数据
+                const isPhycial = /^#(DTR|RTS):[01]$/.test(sendText);   //是不是DTR RTS电平信号
+                if (!isPhycial) {
+                    vscode.postMessage({
+                        command: 'sendData',
+                        data: sendText,
+                        isHex: isHexMode,
+                        isCRLF: isCRLFMode
+                    });
+                    this.addSentData(sendText);
+                } else {
+                    const match = sendText.match(/^#(DTR|RTS):([01])$/);
+                    if (match) {
+                        const signalType = match[1];    // "DTR" 或 "CTS"
+                        const state = match[2] === '1'; // true 或 false
+                        if (signalType === 'DTR') {
+                            vscode.postMessage({
+                                command: 'setDTR',
+                                state: state
+                            });
+                            this.addLog(`设置DTR电平: ${state ? '高' : '低'}`, 'info');
+                        } else if (signalType === 'RTS') {
+                            vscode.postMessage({
+                                command: 'setRTS',
+                                state: state
+                            });
+                            this.addLog(`设置RTS电平: ${state ? '高' : '低'}`, 'info');
+                        }
+                    }
+                }
             }
-            // 记录发送的数据
-            this.addSentData(sendText);
             
         } catch (err) {
             console.error('Error sending data:', err);
@@ -479,15 +486,10 @@ const SerialDebug = {
             // 获取当前命令的索引（序号）
             const commandItems = Array.from(document.querySelectorAll('.at-command-item'));
             const commandIndex = commandItems.indexOf(itemDiv);
-            
-            // 更新按钮的data-command属性
             const button = itemDiv.querySelector('.send-at-cmd-icon');
             if (button) {
                 button.setAttribute('data-command', newValue);
             }
-            
-            // 通知后端更新命令，传递序号信息
-            // 由于下拉框已移除，改为获取第一个可用配置或当前激活的标签
             const activeTab = document.querySelector('.at-config-tab.active');
             let currentConfig = '';
             if (activeTab) {
@@ -525,24 +527,37 @@ const SerialDebug = {
     displayAtCommands: function(commands) {
         const container = document.getElementById('atCommandsList');
         container.innerHTML = '';
-        
         commands.forEach((cmd) => {
             const cmdElement = document.createElement('div');
             cmdElement.className = 'at-command-item';
-            // 使用setAttribute方法设置data-command属性，避免引号冲突导致命令被截断
             const escapedCmd = this.escapeHtml(cmd);
-            cmdElement.innerHTML = `
+            if (this.isAutomationMode) {
+                cmdElement.innerHTML = `
+                    <span>${escapedCmd === '' ? '&nbsp;' : escapedCmd}</span>
+                    <button class="add-at-cmd-icon" title="添加">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <button class="send-at-cmd-icon" title="发送">
+                        <i class="fa-solid fa-angle-right"></i>
+                    </button>
+                `;
+                //专门设置data-command属性
+                let button = cmdElement.querySelector('.send-at-cmd-icon');
+                button.setAttribute('data-command', cmd);
+                button = cmdElement.querySelector('.add-at-cmd-icon');
+                button.setAttribute('data-command', cmd);
+            } else {
+                cmdElement.innerHTML = `
                 <span>${escapedCmd === '' ? '&nbsp;' : escapedCmd}</span>
-                <button class="send-at-cmd-icon" title="发送命令">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
+                <button class="send-at-cmd-icon" title="发送">
+                    <i class="fa-solid fa-angle-right"></i>
                 </button>
-            `;
-            // 专门设置data-command属性，避免HTML模板中引号冲突
-            const button = cmdElement.querySelector('.send-at-cmd-icon');
-            button.setAttribute('data-command', cmd);
+                `;
+                //专门设置data-command属性
+                const button = cmdElement.querySelector('.send-at-cmd-icon');
+                button.setAttribute('data-command', cmd);
+            }
+  
             container.appendChild(cmdElement);
         });
     },
@@ -565,16 +580,33 @@ const SerialDebug = {
         this.isAutomationMode = !this.isAutomationMode;
         const mainContent = document.querySelector('.main-content');
         const automationButton = document.getElementById('automationModeToggleBtn');
-        
+        const activeTab = document.querySelector('.at-config-tab.active');
+
         if (this.isAutomationMode) {
             mainContent.classList.add('automation-mode');
-            automationButton.title = '关闭自动化模式';
+            automationButton.title = '关闭自动化';
             this.addLog('自动化模式已开启', 'info');
         } else {
             mainContent.classList.remove('automation-mode');
-            automationButton.title = '开启自动化模式';
+            automationButton.title = '开启自动化';
             this.addLog('自动化模式已关闭', 'info');
         }
+        let configName = '';
+        if (activeTab) {
+            configName = activeTab.dataset.configName;
+        } else {
+            const firstTab = document.querySelector('.at-config-tab');
+            if (firstTab) {
+                configName = firstTab.dataset.configName;
+            }
+        }
+        if (vscode) {
+            vscode.postMessage({
+                command: 'loadAtCommands',
+                configName: configName
+            }); 
+        }
+
     },
 
     // 切换面板模式
@@ -587,25 +619,20 @@ const SerialDebug = {
             mainContent.classList.remove('monitor-mode');
             this.clearLog();
             this.addLog('交互模式', 'info');
-            
-            // 退出监控模式时禁用编辑
             const logContainer = document.getElementById('serialLog');
             logContainer.contentEditable = false;
             logContainer.removeAttribute('tabindex');
-            
             // 移除回车键处理事件
             logContainer.removeEventListener('keydown', this.handleMonitorInput.bind(this));
         } else {
             mainContent.classList.add('monitor-mode');
             this.clearLog();
             this.addLog('监控模式', 'info');
-            
             // 在监控模式下聚焦到日志容器并使其可编辑
             const logContainer = document.getElementById('serialLog');
             logContainer.contentEditable = true;
             logContainer.setAttribute('tabindex', '0');
             logContainer.focus();
-            
             // 添加回车键处理事件
             logContainer.addEventListener('keydown', this.handleMonitorInput.bind(this));
         }
@@ -617,12 +644,8 @@ const SerialDebug = {
             e.preventDefault();
             const logContainer = document.getElementById('serialLog');
             const inputText = logContainer.innerText.trim();
-            
-            // 清空输入
             logContainer.innerText = '';
-            
             if (inputText) {
-                // 发送数据
                 document.getElementById('sendText').value = inputText;
                 this.sendData();
             }
@@ -650,12 +673,11 @@ const SerialDebug = {
      * 设置自动化相关的事件监听器
      */
     setupAutomationEventListeners: function() {
-        // 导入命令按钮
+
         document.getElementById('importCommandsBtn').addEventListener('click', () => {
             this.importSelectedCommands();
         });
 
-        // 清空自动化序列按钮
         document.getElementById('clearAutomationBtn').addEventListener('click', () => {
             this.clearAutomationSequence();
         });
@@ -676,9 +698,6 @@ const SerialDebug = {
             }
         });
 
-
-
-        // 设置拖拽功能
         this.setupDragAndDrop();
     },
 
@@ -738,7 +757,6 @@ const SerialDebug = {
             track.innerHTML = '<div class="track-placeholder">拖拽AT命令到这里创建自动化序列</div>';
             return;
         }
-
         this.automation.commands.forEach((cmd, index) => {
             const commandElement = this.createAutomationCommandElement(cmd, index);
             track.appendChild(commandElement);
@@ -769,15 +787,12 @@ const SerialDebug = {
             <div class="command-content">${this.escapeHtml(command.command)}</div>
             <div class="command-settings">
                 <label>
-                    Delay:
+                    S:
                     <input type="number" class="setting-input delay-input" value="${command.delay}" min="0" max="60000" step="10" data-field="delay">
                     ms
                 </label>
                 <button class="remove-command-btn" title="移除命令">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
+                    <i class="fa-solid fa-x"></i>
                 </button>
             </div>
         `;
@@ -993,30 +1008,20 @@ const SerialDebug = {
         const sourceIndex = this.automation.commands.findIndex(cmd => cmd.id === sourceId);
         
         if (sourceIndex === -1) {
-            return; // 源命令不存在
+            return; 
         }
-        
         if (!targetId) {
-            // 如果没有目标ID，则无需移动
             return;
         }
-        
         const targetIndex = this.automation.commands.findIndex(cmd => cmd.id === targetId);
-        
         if (targetIndex === -1 || sourceIndex === targetIndex) {
             return; // 目标命令不存在或相同位置
         }
-        
         // 提取要移动的命令
         const [movedCommand] = this.automation.commands.splice(sourceIndex, 1);
-        
-        // 重新计算插入位置
-        // 如果原始位置在目标位置之前，因为移除了元素，所以目标索引需要减1
         let insertIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
-        
         // 插入到正确位置
         this.automation.commands.splice(insertIndex, 0, movedCommand);
-        
         this.renderAutomationTrack();
         this.saveAutomationSequence();
         this.addLog('命令顺序已调整', 'info');
@@ -1101,11 +1106,11 @@ const SerialDebug = {
      * 执行下一个命令
      */
     executeNextCommand: function() {
+
         if (!this.automation.isRunning || this.automation.isPaused) {
             return;
         }
 
-        // 检查是否完成所有循环
         if (this.automation.totalLoops !== -1 && 
             this.automation.loopCount >= this.automation.totalLoops) {
             this.stopAutomation();
@@ -1140,20 +1145,40 @@ const SerialDebug = {
         const command = this.automation.commands[this.automation.currentStep];
         this.highlightCurrentCommand(this.automation.currentStep);
         this.updateProgress();
-        //this.addLog(`执行: ${command.command}`, 'info');
-        this.addSentData(`${command.command}`);
-        // 发送命令
         if (vscode) {
-            vscode.postMessage({
-                command: 'sendData',
-                data: command.command,
-                isHex: false
-            });
+            const isPhycial = /^#(DTR|RTS):[01]$/.test(`${command.command}`);  //是不是DTR RTS电平信号
+            if (!isPhycial) {
+                // 发送命令
+                vscode.postMessage({
+                    command: 'sendData',
+                    data: command.command,
+                    isHex: false,
+                    isCFLF: command.isCFLF
+                });
+                this.addSentData(`${command.command}`);
+            } else {
+                const match = `${command.command}`.match(/^#(DTR|RTS):([01])$/);
+                if (match) {
+                    const signalType = match[1];    // "DTR" 或 "CTS"
+                    const state = match[2] === '1'; // true 或 false
+                    if (signalType === 'DTR') {
+                        vscode.postMessage({
+                            command: 'setDTR',
+                            state: state
+                        });
+                        this.addLog(`设置DTR电平: ${state ? '高' : '低'}`, 'info');
+                    } else if (signalType === 'RTS') {
+                        vscode.postMessage({
+                            command: 'setRTS',
+                            state: state
+                        });
+                        this.addLog(`设置RTS电平: ${state ? '高' : '低'}`, 'info');
+                    }
+                }
+            }
         }
-
-        // 延迟执行下一个命令，确保命令按顺序执行
+        // 延迟执行下一个命令
         this.automation.timer = setTimeout(() => {
-            // 确保只有在没有暂停的情况下才执行下一步
             if (!this.automation.isPaused && this.automation.isRunning) {
                 this.automation.currentStep++;
                 this.executeNextCommand();
@@ -1170,7 +1195,6 @@ const SerialDebug = {
             item.style.border = '1px solid var(--border-color)';
             item.style.backgroundColor = 'var(--select-bg)';
         });
-
         // 高亮当前命令
         const currentItem = document.querySelector(`.automation-command-item[data-index="${stepIndex}"]`);
         if (currentItem) {
@@ -1188,20 +1212,14 @@ const SerialDebug = {
         const currentStep = this.automation.loopCount * this.automation.commands.length + 
                            this.automation.currentStep;
         const progress = totalSteps > 0 ? (currentStep / totalSteps) * 100 : 0;
-
-        const progressBar = document.querySelector('.progress-fill');
         const progressText = document.querySelector('.progress-text');
-        const currentStepElement = document.querySelector('.current-step');
         const elapsedTimeElement = document.querySelector('.elapsed-time');
-
-        if (progressBar) progressBar.style.width = `${progress}%`;
-        if (progressText) progressText.textContent = `${Math.round(progress)}%`;
-        if (currentStepElement) {
-            currentStepElement.textContent = `当前: 执行第${this.automation.currentStep + 1}个命令`;
+        if(this.automation.totalLoops !== -1){
+            if (progressText) progressText.textContent = `总进度：${Math.round(progress)}%`;
         }
         if (elapsedTimeElement && this.automation.startTime) {
             const elapsed = Math.floor((Date.now() - this.automation.startTime) / 1000);
-            elapsedTimeElement.textContent = `耗时: ${elapsed}s`;
+            elapsedTimeElement.textContent = `总耗时: ${elapsed}s`;
         }
     },
 
@@ -1211,7 +1229,8 @@ const SerialDebug = {
     updateAutomationUI: function(state) {
         const toggleBtn = document.getElementById('toggleAutomationBtn');
         const pauseBtn = document.getElementById('pauseResumeBtn');
-        
+        const autoStatus = document.getElementById('automationStatus');
+
         // 隐藏所有图标
         const togglePlayIcon = toggleBtn.querySelector('.icon-play');
         const toggleStopIcon = toggleBtn.querySelector('.icon-stop');
@@ -1230,6 +1249,9 @@ const SerialDebug = {
             pauseBtn.title = '暂停';
             
             pauseBtn.disabled = false;
+            
+            autoStatus.style.display = 'flex';
+
         } else if (state === 'paused') {
             // 切换按钮保持停止图标
             togglePlayIcon.style.display = 'none';
@@ -1240,6 +1262,8 @@ const SerialDebug = {
             pausePauseIcon.style.display = 'none';
             pauseResumeIcon.style.display = 'block';
             pauseBtn.title = '继续';
+            
+            autoStatus.style.display = 'flex';
         } else { // stopped
             // 切换按钮显示播放图标
             togglePlayIcon.style.display = 'block';
@@ -1251,20 +1275,22 @@ const SerialDebug = {
             pauseResumeIcon.style.display = 'none';
             pauseBtn.title = '暂停';
             pauseBtn.disabled = true;
+            
+            autoStatus.style.display = 'none';
         }
     },
 
     /**
      * 将AT命令添加到自动化轨道
      */
-    addCommandToAutomationTrack: function(commandText) {
+    addCommandToAutomationTrack: function(commandText , isCFLF= true) {
         // 创建命令对象
         const commandObj = {
             id: 'cmd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
             command: commandText,
-            delay: 1000      // 默认延迟1秒
+            delay: 1000,
+            isCFLF: isCFLF
         };
-
         // 添加到自动化序列
         this.automation.commands.push(commandObj);
         this.renderAutomationTrack();
@@ -1313,7 +1339,7 @@ window.addEventListener('message', event => {
             
             // 设置DTR和RTS的初始状态
             const dtrState = document.getElementById('dtrCheckbox').checked;
-            const rtsState = document.getElementById('ctsCheckbox').checked;
+            const rtsState = document.getElementById('rtsCheckbox').checked;
             
             if (vscode) {
                 vscode.postMessage({

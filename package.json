@@ -142,10 +142,15 @@
           "default": "",
           "description": "构建命令"
         },
+        "quickFirmwarePlus.buildGitBashPath": {
+          "type": "string",
+          "default": "",
+          "description": "Git bash 执行程序路径和文件 例如: \"C:\\Program Files\\Git\\bin\\bash.exe\"(windows)"
+        },
         "quickFirmwarePlus.atCommandPaths": {
           "type": "array",
           "default": [],
-          "description": "AT命令配置文件路径列表",
+          "description": "加载AT命令配置文件路径列表",
           "items": {
             "type": "string"
           },

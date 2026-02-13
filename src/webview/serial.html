@@ -6,12 +6,14 @@
     <meta name="author" content="Destin.zhang@quectel.com">
     <title>[Quick Serial]</title>
     <link rel="stylesheet" href="./serial.css">
+    <link rel="stylesheet" href="./assets/fontawesome/all.min.css">
 </head>
 <body>
     <div class="container">
         <!-- 顶部控制面板 -->
         <div class="control-panel">
             <div class="connection-controls">
+
                 <label for="portSelector">串口:</label>
                 <select id="portSelector"></select>
                 
@@ -26,7 +28,9 @@
                     <option value="460800">460800</option>
                     <option value="921600">921600</option>
                 </select>
+
                 <button id="connectBtn" class="btn-connect">连接</button>
+
             </div>
             
             <div class="settings-controls">
@@ -80,29 +84,24 @@
                 <!-- 操作按钮区域 -->
                 <div class="log-actions" style="margin-top: 10px;">
                     <button id="clearLogBtn" class="btn-icon" title="清空日志">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
-                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                            <line x1="10" y1="11" x2="10" y2="17"></line>
-                            <line x1="14" y1="11" x2="14" y2="17"></line>
-                        </svg>
+                        <i class="fa-regular fa-trash-can"></i>
                     </button>
                     <button id="saveLogBtn" class="btn-icon" title="保存日志">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
-                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                            <polyline points="7 3 7 8 15 8"></polyline>
-                        </svg>
+                        <i class="fa-regular fa-file-lines"></i>
                     </button>
 
-                    <div class="dtr-cts-controls">
+                    <div class="actions-checkbox-controls">
                         <label for="dtrCheckbox">
                             <input type="checkbox" id="dtrCheckbox"> DTR
                         </label>
-                        <label for="ctsCheckbox">
-                            <input type="checkbox" id="ctsCheckbox"> CTS
+                        <label for="rtsCheckbox">
+                            <input type="checkbox" id="rtsCheckbox"> RTS
                         </label>
                         <label for="hexModeCheckbox">
                             <input type="checkbox" id="hexModeCheckbox"> HEX
+                        </label>
+                        <label for="crlfModeCheckbox">
+                            <input type="checkbox" id="crlfModeCheckbox" checked> CRLF
                         </label>
                     </div>
 
@@ -145,17 +144,25 @@
                 <div id="automationTrack" class="automation-track">
                     <div class="track-placeholder">命令自动化序列</div>
                 </div>
-                
+
+                 <!-- 执行状态显示 -->
+                <div id="automationStatus" class="automation-status" style="display:none;">
+                    <div class="status-info">
+                        <span class="progress-text">总进度：0%</span>
+                        <span class="elapsed-time">总耗时: 0s</span>
+                    </div>
+                </div>
+
                 <!-- 执行控制区域 -->
                 <div class="automation-controls">
                     <div class="settings-control-row">
                         <div class="settings-row">
                             <label>
-                                循环次数:
+                                循环:
                                 <input type="number" id="loopCountInput" value="1" min="-1" max="9999">
                             </label>
                             <label>
-                                间隔(ms):
+                                间隔:
                                 <input type="number" id="commandIntervalInput" value="1000" min="0" max="60000" step="100">
                             </label>
                         </div>
@@ -181,19 +188,8 @@
                     </div>
                 </div>
                 
-                <!-- 执行状态显示 -->
-                <div id="automationStatus" class="automation-status" style="display:none;">
-                    <div class="status-progress">
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: 0%"></div>
-                        </div>
-                        <span class="progress-text">0%</span>
-                    </div>
-                    <div class="status-info">
-                        <span class="current-step">当前: 等待开始</span>
-                        <span class="elapsed-time">耗时: 0s</span>
-                    </div>
-                </div>
+ 
+
             </div>
 
             <!-- AT命令区域 -->
@@ -202,7 +198,7 @@
                     <div class="at-header">
                         <div class="title-and-button-container">
                             <h3>命令集</h3>
-                            <button id="addAtCommandTab" class="btn-at-header" title="添加标签页">
+                            <button id="addAtCommandTab" class="btn-at-header" title="添加命令集">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <line x1="12" y1="5" x2="12" y2="19"></line>
                                     <line x1="5" y1="12" x2="19" y2="12"></line>

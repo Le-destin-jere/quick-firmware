@@ -543,7 +543,6 @@ body {
     border: 1px solid var(--border-color);
 }
 
-/* 编辑状态下的输入框样式 */
 .at-command-item.editing input {
     background-color: var(--at-command-item-editing);
     border: 1px solid var(--primary-color);
@@ -557,17 +556,11 @@ body {
 /* 日志区域 */
 .log-section {
     background: var(--panel-background);
-    /*  border-radius: 6px;
-    box-shadow: 0 2px 8px var(--highlight-shadow-color); */
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
     overflow: hidden;
-}
-
-.light-theme .log-section {
-    box-shadow: 0 2px 8px var(--highlight-shadow-color);
 }
 
 .log-header {
@@ -589,7 +582,8 @@ body {
     display: flex;
     gap: 10px;
     margin-top: 10px;
-    margin-left: 15px;
+    margin-bottom: 10px;
+    margin-left: 10px;
 }
 
 .main-content.monitor-mode .log-actions { 
@@ -605,7 +599,7 @@ body {
     background: transparent;
     color: var(--text-color);
     cursor: pointer;
-    font-size: 14px;
+    font-size: 16px;
 }
 
 .log-actions .btn-icon.btn-icon:hover {
@@ -644,7 +638,7 @@ body {
 
 .log-entry {
     margin-bottom: 2px;
-    padding: 2px 0;
+    padding: 3px 5px;
     font-family: 'monospace', Monaco, Consolas;
 }
 
@@ -654,7 +648,6 @@ body {
     outline: none;
 }
 
-/* 非监控模式下确保不可编辑 */
 .serial-log-container {
     -webkit-user-modify: read-only;
     -moz-user-modify: read-only;
@@ -738,7 +731,6 @@ body {
     word-break: break-all;
 }
 
-/* 发送区域 */
 .send-section {
     background: var(--panel-background);
     border-radius: 6px;
@@ -751,12 +743,10 @@ body {
     box-shadow: 0 2px 8px var(--shadow-color-dark);
 }
 
-/* 在监控模式下隐藏发送区域 */
 .main-content.monitor-mode .send-section {
     display: none;
 }
 
-/* 在自动化模式下也隐藏发送区域 */
 .main-content.automation-mode .send-section {
     display: none;
 }
@@ -856,7 +846,8 @@ body {
     background-color: #337ecc;
 }
 
-.send-at-cmd-icon {
+.send-at-cmd-icon,
+.add-at-cmd-icon {
     padding: 4px;
     background: transparent;
     border: none;
@@ -867,9 +858,12 @@ body {
     justify-content: center;
     border-radius: 3px;
     transition: background-color 0.2s;
+    font-size: 14px;
+    margin-right: 5px;
 }
 
-.light-theme .send-at-cmd-icon {
+.light-theme .send-at-cmd-icon,
+.add-at-cmd-icon {
     color: var(--primary-color);
 }
 
@@ -878,30 +872,34 @@ body {
     color: white;
 }
 
-.light-theme .send-at-cmd-icon:hover {
+.add-at-cmd-icon:hover {
+    background-color: var(--checkbox-check-bg);
+    color: white;
+}
+
+.light-theme .send-at-cmd-icon:hover,
+.add-at-cmd-icon:hover {
     background-color: var(--checkbox-check-bg-light);
     color: var(--primary-color);
 }
 
-.send-at-cmd-icon svg {
-    width: 16px;
-    height: 16px;
-    pointer-events: none; /* 确保SVG不影响按钮点击 */
-}
 
-.main-content.automation-mode .send-at-cmd-icon {
+.main-content.automation-mode .add-at-cmd-icon {
     color: var(--success-color);
 }
 
 
-/* DTR/CTS 复选框样式 */
-.dtr-cts-controls {
+.actions-checkbox-controls {
     display: flex;
     gap: 15px;
     align-items: center;
 }
 
-.dtr-cts-controls label {
+.main-content.automation-mode .actions-checkbox-controls {
+    display: none;
+}
+
+.actions-checkbox-controls label {
     display: flex;
     align-items: center;
     gap: 5px;
@@ -910,7 +908,7 @@ body {
     cursor: pointer;
 }
 
-.dtr-cts-controls input[type="checkbox"] {
+.actions-checkbox-controls input[type="checkbox"] {
     width: 16px;
     height: 16px;
     border: 1px solid var(--border-color);
@@ -922,15 +920,15 @@ body {
     margin: 0;
 }
 
-.light-theme .dtr-cts-controls input[type="checkbox"] {
+.light-theme .actions-checkbox-controls input[type="checkbox"] {
     background-color: var(--checkbox-bg);
 }
 
-.dtr-cts-controls input[type="checkbox"]:checked {
+.actions-checkbox-controls input[type="checkbox"]:checked {
     background-color: var(--primary-color);
 }
 
-.dtr-cts-controls input[type="checkbox"]:checked::after {
+.actions-checkbox-controls input[type="checkbox"]:checked::after {
     content: '';
     position: absolute;
     left: 4px;
@@ -942,7 +940,6 @@ body {
     transform: rotate(45deg);
 }
 
-/* 隐藏滚动条但仍保留滚动功能 */
 .serial-log-container,
 #atCommandsList {
     -ms-overflow-style: none;  /* IE and Edge */
@@ -1062,8 +1059,7 @@ body {
 
 .automation-header {
     background-color: var(--panel-background);
-    border-bottom: 1px solid var(--border-color);
-    flex-shrink: 0; /* 防止头部被压缩 */
+    flex-shrink: 0; 
 }
 
 .automation-buttons {
@@ -1076,17 +1072,14 @@ body {
     min-height: 120px;
     padding: 10px;
     background-color: var(--background-color);
-    border-bottom: 1px solid var(--border-color);
+    /* border-bottom: 1px solid var(--border-color); */
     position: relative;
-    transition: background-color 0.2s;
     overflow-y: auto; /* 添加垂直滚动 */
-    /* 删除固定最大高度，改为高度自适应 */
     max-height: none;
     height: auto;
-    
     /* 隐藏滚动条但仍保持滚动功能 */
     -ms-overflow-style: none; /* IE 和 Edge */
-    scrollbar-width: none; /* Firefox */
+    scrollbar-width: none;   /* Firefox */
 }
 
 /* Webkit 浏览器（Chrome, Safari 等）隐藏滚动条 */
@@ -1233,8 +1226,13 @@ body {
     flex-direction: column;
     padding: 10px;
     background-color: var(--panel-background);
-    border-top: 1px solid var(--border-color);
-    flex-shrink: 0; /* 防止控制区域被压缩 */
+    flex-shrink: 0; 
+}
+
+.automation-status {
+    margin-left: 10px;
+    font-size: 12px;
+    padding: 2px;
 }
 
 /* 新的设置和控制行布局 - 水平排列 */

@@ -114,7 +114,7 @@ class QuickSerial {
      * @param {string} data - 要发送的数据
      * @param {boolean} isHex - 是否为十六进制数据
      */
-    async write(data, isHex = false) {
+    async write(data, isHex = false, isCRLF = true) {
         if (!this.port || !this.isOpen) {
             throw new Error('Serial port is not open');
         }
@@ -133,15 +133,24 @@ class QuickSerial {
                     });
                 });
             } else {
-                // 发送文本数据
                 await new Promise((resolve, reject) => {
-                    this.port.write(data + '\r\n', (err) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            resolve();
-                        }
-                    });
+                    if (isCRLF) {
+                        this.port.write(data + '\r\n', (err) => {
+                            if (err) {
+                                reject(err);
+                            } else {
+                                resolve();
+                            }
+                        });
+                    } else {
+                        this.port.write(data, (err) => {
+                            if (err) {
+                                reject(err);
+                            } else {
+                                resolve();
+                            }
+                        });
+                    }
                 });
             }
         } catch (err) {

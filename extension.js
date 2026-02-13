@@ -11,7 +11,7 @@ const admzip = require('adm-zip');
 const iconv = require('iconv-lite');
 const { spawn } = require('child_process');
 const ini = require('ini');
-const si = require('systeminformation');
+const { QuickSerial } = require('./src/serial/quick_serial');
 
 /** @note all download tool path used by this extension directly */
 const tool_set = {
@@ -25,7 +25,6 @@ const tool_set = {
 const output_chan = vscode.window.createOutputChannel('Quick Firmware +');
 const alert = "无法识别到有效下载固件，请指定文件/目录";
 
-// 获取配置的工具函数
 function get_configuration() {
     return vscode.workspace.getConfiguration('quickFirmwarePlus');
 }
@@ -38,15 +37,9 @@ function is_remote_ssh() {
     return vscode.env.remoteName === 'ssh-remote';
 }
 
-function not_support_disp() 
-{
+function not_support_disp() {
     vscode.window.showErrorMessage(`${alert}`);
 } 
-
-// 导入新的串口实现
-const { QuickSerial } = require('./src/serial/quick_serial');
-
-// 串口调试功能相关代码
 
 // 添加串口实例
 const serialPanels = [];
@@ -54,7 +47,6 @@ const quickSerialInstances = [];
 
 // 创建串口调试WebView面板
 function createSerialDebugPanel() {
-    // 不再检查是否已存在面板，总是创建新面板
 
     // 创建新的WebView面板
     const panel = vscode.window.createWebviewPanel(
@@ -66,11 +58,9 @@ function createSerialDebugPanel() {
             retainContextWhenHidden: true // 隐藏时保持状态
         }
     );
-
-    // 为每个面板创建独立的串口实例
+    // 每个面板创建独立的串口实例
     const quickSerial = new QuickSerial();
     const panelIndex = serialPanels.length;
-    
     // 存储面板和串口实例
     serialPanels.push(panel);
     quickSerialInstances.push(quickSerial);
@@ -78,13 +68,10 @@ function createSerialDebugPanel() {
     panel.webview.html = getSerialWebviewContent(panel.webview);
     // 当面板被处置时，清理引用
     panel.onDidDispose(() => {
-        // 找到并移除对应的面板和串口实例
         const index = serialPanels.indexOf(panel);
         if (index !== -1) {
             serialPanels.splice(index, 1);
             quickSerialInstances.splice(index, 1);
-            
-            // 关闭串口连接
             quickSerial.close().catch(() => {});
         }
     });
@@ -92,7 +79,6 @@ function createSerialDebugPanel() {
     panel.webview.onDidReceiveMessage((message) => {
         handleWebviewMessage(message, panelIndex, quickSerial);
     });
-
     // 面板创建后 AT命令配置列表
     loadAtConfigList();
   
@@ -102,14 +88,13 @@ function createSerialDebugPanel() {
 function getSerialWebviewContent(webview) {
     const scriptUri = webview.asWebviewUri(vscode.Uri.file(path.join(__dirname, 'src', 'webview', 'serial.js')));
     const cssUri = webview.asWebviewUri(vscode.Uri.file(path.join(__dirname, 'src', 'webview', 'serial.css')));
+    const fontawesomeCssUri = webview.asWebviewUri(vscode.Uri.file(path.join(__dirname, 'src', 'webview', 'assets', 'fontawesome', 'all.min.css')));
     const htmlPath = path.join(__dirname, 'src', 'webview', 'serial.html');
-    
-    // 读取HTML模板并替换资源路径
     let htmlContent = fs.readFileSync(htmlPath, 'utf-8');
     // 替换CSS和JS引用为Webview URI
     htmlContent = htmlContent.replace('./serial.css', cssUri.toString());
     htmlContent = htmlContent.replace('./serial.js', scriptUri.toString());
-    
+    htmlContent = htmlContent.replace('./assets/fontawesome/all.min.css', fontawesomeCssUri.toString());
     return htmlContent;
 }
 
@@ -133,7 +118,6 @@ async function handleWebviewMessage(message, panelIndex, quickSerial) {
                             });
                         }
                     });
-                    
                     // 通知WebView连接成功
                     if (serialPanels[panelIndex] && serialPanels[panelIndex].webview) {
                         serialPanels[panelIndex].webview.postMessage({
@@ -152,7 +136,7 @@ async function handleWebviewMessage(message, panelIndex, quickSerial) {
         case 'serialDisconnected':
             try {
                 await quickSerial.close();
-                //vscode.window.showInformationMessage('串口已断开');
+
             } catch (err) {
                 vscode.window.showErrorMessage(`串口断开错误: ${err.message}`);
             }
@@ -173,8 +157,10 @@ async function handleWebviewMessage(message, panelIndex, quickSerial) {
         case 'sendData':
             try {
                 const data = message.data;
-                const isHex = message.isHex || false;
-                await quickSerial.write(data, isHex);
+                const isHex = message.isHex   || false;
+                const isCRLF = (message.isCRLF === undefined || message.isCRLF === null) ? true : message.isCRLF;
+                output_chan.appendLine(`serial send ${data} with hex:${isHex} crlf:${isCRLF}`);
+                await quickSerial.write(data, isHex, isCRLF);
             } catch (err) {
                 vscode.window.showErrorMessage(`发送数据失败: ${err.message}`);
             }
@@ -217,8 +203,8 @@ async function handleWebviewMessage(message, panelIndex, quickSerial) {
                 panelIndex
             );
             break;
-        case 'createNewAtConfig':
-            createNewAtConfig(serialPanels[panelIndex]);
+        case 'addNewAtConfig':
+            addNewAtConfig(serialPanels[panelIndex]);
             break;
         case 'saveLog':
             await saveSerialLog(message.content);
@@ -229,8 +215,20 @@ async function handleWebviewMessage(message, panelIndex, quickSerial) {
 // 加载AT命令配置列表
 function loadAtConfigList() {
     const config = get_configuration();
-    const atCommandPaths = config.get('atCommandPaths') || [];
+    let atCommandPaths = config.get('atCommandPaths') || [];
     const configs = [];
+    if (atCommandPaths.length === 0) {
+        const defaultPath = path.join(__dirname, 'src', 'webview', 'basic.ini');
+        if (fs.existsSync(defaultPath)) {
+            configs.push({
+                name: `file:${defaultPath}`,
+                displayName: `file:${defaultPath}`
+            });
+            atCommandPaths.push(defaultPath);
+            config.update('atCommandPaths', atCommandPaths, vscode.ConfigurationTarget.Global);
+        }
+    }
+
     atCommandPaths.forEach((cmdPath) => {
         if (cmdPath && cmdPath.trim() !== '') {
             if (fs.existsSync(cmdPath)) {
@@ -246,9 +244,9 @@ function loadAtConfigList() {
 }
 
 // 创建新的AT命令配置
-async function createNewAtConfig(targetPanel) {
+async function addNewAtConfig(targetPanel) {
     try {
-        // 弹出文件对话框让用户选择.ini文件
+        // 对话框让用户选择
         const options = {
             canSelectMany: false,
             openLabel: '选择',
@@ -269,7 +267,6 @@ async function createNewAtConfig(targetPanel) {
             if (!atCommandPaths.includes(filePath)) {
                 atCommandPaths.push(filePath);
                 await config.update('atCommandPaths', atCommandPaths, vscode.ConfigurationTarget.Global);
-                // 重新加载配置列表并发送到webview
                 loadAtConfigList();
                 vscode.window.showInformationMessage('成功添加AT命令配置文件！');
             } else {
@@ -290,14 +287,11 @@ function parseAtCommandsFromIni(iniFile) {
     );
     
     if (numericSections.length > 0) {
-        // 处理数字键的格式
         numericSections.sort((a, b) => parseInt(a) - parseInt(b)).forEach(sectionKey => {
             const cmdValue = iniFile[sectionKey]['CMD'];
-            // 修改：即使cmdValue为空字符串也要添加到atCommands中
             if (typeof cmdValue === 'string') {
                 atCommands.push(cmdValue);
             }
-            // 如果cmdValue不存在或不是字符串，也添加空字符串以保持序号对应
             else if (cmdValue === undefined || cmdValue === null) {
                 atCommands.push('');
             }
@@ -310,7 +304,7 @@ function parseAtCommandsFromIni(iniFile) {
 // webview request load AT command list
 function loadAtCommandsFromIni(configName = null, targetPanel = null) {
 
-    let iniPath;
+    let iniPath = null;
     let atCommands = [];
  
     if (configName && configName.startsWith('file:')) {
@@ -785,7 +779,7 @@ class progress_tracker
     update_progress(progress) {
         if (progress !== null && !isNaN(progress)) {
             this.current_progress = progress;
-            this.status_bar_dl.text = `${this.get_progress_bar(7)}`;
+            this.status_bar_dl.text = `${this.get_progress_bar(5)}`;
         }
     }
     
@@ -1163,7 +1157,7 @@ function activate(context)
         const config = get_configuration();
         let build_args = config.get('buildCommand') || '';
         let is_bash = false;
-        let bash_run = "C:\\Program Files\\Git\\bin\\bash.exe";
+        let bash_run = config.get('buildGitBashPath') || '';
         
         // 默认选择bulid OPT.bat
         if (!build_args) { 
@@ -1186,6 +1180,13 @@ function activate(context)
                         build_args = path.basename(file_path);
                         output_chan.appendLine(`root build file name: ${build_args} git bash`);
                         is_bash = true;
+                        if (fs.existsSync(bash_run)) {
+                            output_chan.appendLine(`git bash.exe path: ${bash_run}`);
+                        } else {
+                            vscode.window.showErrorMessage(`请配置git bash.exe路径`);
+                            vscode.commands.executeCommand('firmwareDownloader.settings');
+                            return;
+                        }
                     }
                 }
             }
